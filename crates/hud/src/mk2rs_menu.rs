@@ -9,6 +9,10 @@ pub(crate) struct Mk2rsState {
     page: usize,
     selected: usize,
     notice: String,
+    god_mode_requested: bool,
+    infinite_ammo: bool,
+    ammo_timer: f32,
+    clan_tag: bool, // cosmetic name prefix only
 }
 
 #[derive(Resource)]
@@ -36,13 +40,24 @@ const MAIN: &[&str] = &[
 ];
 const PAGES: &[&[&str]] = &[
     MAIN,
-    &["God Mode (planned)", "Infinite Ammo (not implemented)"],
+    &["God Mode", "Infinite Ammo"],
     &["Spawn 1 Bot", "Spawn 5 Bots", "Spawn 10 Bots"],
-    &["Aim Assist (planned)"],
-    &["Give Weapon (planned)"],
-    &["Prestige (planned)"],
-    &["Rainbow MK2RS (planned)"],
-    &["Super Jump (planned)"],
+    &["Aimbot (not supported yet)"],
+    &[
+        "Give M4A1",
+        "Give AK-47",
+        "Give Intervention",
+        "Give UMP45",
+        "Give Desert Eagle",
+    ],
+    &["Prestige (not supported yet)"],
+    &[
+        "Set Name: MK2RS",
+        "Set Name: Rainbow",
+        "Set Name: Player",
+        "Clan Tag [MK2] (name prefix)",
+    ],
+    &["Super Jump (not supported yet)"],
 ];
 
 pub(crate) fn load_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
@@ -135,6 +150,13 @@ pub(crate) fn handle_input(
     mut footer: Query<&mut Text, With<Mk2rsNotice>>,
     mut bot_queue: Option<ResMut<bots::BotAddQueue>>,
     font: Option<Res<Mk2rsFont>>,
+    time: Res<Time>,
+    weapons: Option<Res<assets::PreparedWeapons>>,
+    // MK2RS_GODMODE_BRIDGE: use the game's authoritative ClientAction pipeline.
+    mut action_inbox: Option<ResMut<net::ClientActionInbox>>,
+    local_client: Option<Res<net::LocalPresentClient>>,
+    mut action_ids: Option<ResMut<net::ActionRequestIds>>,
+    cheats: Option<Res<sim::HostCheats>>,
 ) {
     let in_game = matches!(*screen, AppScreen::InGame);
     if !in_game {
@@ -174,6 +196,114 @@ pub(crate) fn handle_input(
                 state.page = state.selected + 1;
                 state.selected = 0;
                 state.notice.clear();
+            } else if state.page == 1 && state.selected == 0 {
+                if !role.as_ref().is_some_and(|r| r.runs_authority())
+                    || !cheats.as_ref().is_some_and(|c| c.0)
+                {
+                    state.notice = "God Mode requires a local match with cheats enabled".into();
+                } else if let (Some(inbox), Some(local), Some(ids)) = (
+                    action_inbox.as_mut(),
+                    local_client.as_ref(),
+                    action_ids.as_mut(),
+                ) {
+                    let request_id = ids.allocate();
+                    match inbox.push(local.0, sim::ClientAction::ToggleGod { request_id }) {
+                        Ok(()) => {
+                            state.god_mode_requested = !state.god_mode_requested;
+                            state.notice = "God Mode request sent to host".into();
+                        }
+                        Err(e) => state.notice = format!("God Mode request failed: {e}"),
+                    }
+                } else {
+                    state.notice = "God Mode action system unavailable".into();
+                }
+            } else if state.page == 1 && state.selected == 1 {
+                if !role.as_ref().is_some_and(|r| r.runs_authority())
+                    || !cheats.as_ref().is_some_and(|c| c.0)
+                {
+                    state.notice = "Infinite Ammo requires local host + cheats".into();
+                } else {
+                    state.infinite_ammo = !state.infinite_ammo;
+                    state.ammo_timer = 0.0;
+                    state.notice = format!(
+                        "Infinite Ammo: {}",
+                        if state.infinite_ammo { "ON" } else { "OFF" }
+                    );
+                }
+            } else if state.page == 4 {
+                // MK2RS_V3_CONSOLIDATED: use the same authoritative GiveWeapon action as the console.
+                const WEAPON_NAMES: [&str; 5] =
+                    ["m4", "ak47", "intervention", "ump45", "deserteagle"];
+                if !role.as_ref().is_some_and(|r| r.runs_authority())
+                    || !cheats.as_ref().is_some_and(|c| c.0)
+                {
+                    state.notice = "Give Weapon requires local host + cheats".into();
+                } else if let (Some(inbox), Some(local), Some(ids), Some(weapons)) = (
+                    action_inbox.as_mut(),
+                    local_client.as_ref(),
+                    action_ids.as_mut(),
+                    weapons.as_ref(),
+                ) {
+                    let weapon_name = WEAPON_NAMES[state.selected];
+                    let registry = &weapons.0;
+                    let found = registry
+                        .resolve_index(weapon_name)
+                        .ok()
+                        .flatten()
+                        .or_else(|| {
+                            registry
+                                .resolve_index(&format!("{weapon_name}_mp"))
+                                .ok()
+                                .flatten()
+                        });
+                    if let Some(weapon) = found {
+                        let request_id = ids.allocate();
+                        match inbox.push(
+                            local.0,
+                            sim::ClientAction::GiveWeapon {
+                                request_id,
+                                weapon,
+                                model: 0,
+                            },
+                        ) {
+                            Ok(()) => state.notice = format!("Weapon requested: {weapon_name}"),
+                            Err(e) => state.notice = format!("Weapon request failed: {e}"),
+                        }
+                    } else {
+                        state.notice = format!("Weapon unavailable in catalog: {weapon_name}");
+                    }
+                } else {
+                    state.notice = "Weapon catalog or action system unavailable".into();
+                }
+            } else if state.page == 6 {
+                // Clan tag is a cosmetic name prefix, not the engine's real clan-tag field.
+                const PRESETS: [&str; 3] = ["MK2RS", "Rainbow", "Player"];
+                if state.selected == 3 {
+                    state.clan_tag = !state.clan_tag;
+                }
+                if let (Some(inbox), Some(local), Some(ids)) = (
+                    action_inbox.as_mut(),
+                    local_client.as_ref(),
+                    action_ids.as_mut(),
+                ) {
+                    let base = PRESETS[state.selected.min(2)];
+                    let chosen = if state.clan_tag {
+                        format!("[MK2]{base}")
+                    } else {
+                        base.to_owned()
+                    };
+                    let mut name = [0u8; 16];
+                    let raw = chosen.as_bytes();
+                    let len = raw.len().min(name.len());
+                    name[..len].copy_from_slice(&raw[..len]);
+                    let request_id = ids.allocate();
+                    match inbox.push(local.0, sim::ClientAction::SetName { request_id, name }) {
+                        Ok(()) => state.notice = format!("Name requested: {chosen}"),
+                        Err(e) => state.notice = format!("Name request failed: {e}"),
+                    }
+                } else {
+                    state.notice = "Name action system unavailable".into();
+                }
             } else if state.page == 2 {
                 if role.as_ref().is_some_and(|r| r.runs_authority()) {
                     if let Some(queue) = bot_queue.as_mut() {
@@ -188,6 +318,27 @@ pub(crate) fn handle_input(
                 }
             } else {
                 state.notice = "Not implemented yet".into();
+            }
+        }
+    }
+    // Host-authoritative recurring resupply: works while alive, not a zero-consumption clip.
+    if state.infinite_ammo && in_game {
+        state.ammo_timer -= time.delta_secs();
+        if state.ammo_timer <= 0.0 {
+            state.ammo_timer = 0.4;
+            if role.as_ref().is_some_and(|r| r.runs_authority())
+                && cheats.as_ref().is_some_and(|c| c.0)
+            {
+                if let (Some(inbox), Some(local), Some(ids)) = (
+                    action_inbox.as_mut(),
+                    local_client.as_ref(),
+                    action_ids.as_mut(),
+                ) {
+                    let request_id = ids.allocate();
+                    let _ = inbox.push(local.0, sim::ClientAction::ResupplyAmmo { request_id });
+                }
+            } else {
+                state.infinite_ammo = false;
             }
         }
     }
@@ -237,7 +388,29 @@ pub(crate) fn handle_input(
         });
         for child in children.iter() {
             if let Ok((mut value, mut color, _)) = texts.get_mut(child) {
-                value.0 = format!("{} {item}", if selected { ">" } else { " " });
+                let label = if state.page == 1 && index.0 == 0 {
+                    format!(
+                        "God Mode: {} (requested)",
+                        if state.god_mode_requested {
+                            "ON"
+                        } else {
+                            "OFF"
+                        }
+                    )
+                } else if state.page == 1 && index.0 == 1 {
+                    format!(
+                        "Infinite Ammo: {}",
+                        if state.infinite_ammo { "ON" } else { "OFF" }
+                    )
+                } else if state.page == 6 && index.0 == 3 {
+                    format!(
+                        "Clan Tag [MK2]: {} (name prefix)",
+                        if state.clan_tag { "ON" } else { "OFF" }
+                    )
+                } else {
+                    (*item).to_owned()
+                };
+                value.0 = format!("{} {label}", if selected { ">" } else { " " });
                 color.0 = Color::WHITE;
             }
         }
