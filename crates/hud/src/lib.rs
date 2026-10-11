@@ -18,6 +18,7 @@ mod killcam_skip;
 mod killfeed;
 mod mantle_hint;
 mod menus;
+mod mk2rs_menu;
 mod overhead_names;
 mod playercard;
 mod plugin;

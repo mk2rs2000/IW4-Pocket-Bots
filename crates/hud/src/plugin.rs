@@ -40,6 +40,7 @@ impl Plugin for HudPlugin {
         let _ = crate::scorebar::milliseconds();
         app.init_resource::<frame::ScreenEffectsView>()
             .init_resource::<HudImages>()
+            .init_resource::<crate::mk2rs_menu::Mk2rsState>()
             .init_resource::<HudPresentationGaps>()
             .init_resource::<ReticleAdsLatch>()
             .init_resource::<IrisLetterboxFill>()
@@ -63,6 +64,7 @@ impl Plugin for HudPlugin {
             .add_message::<net::SvcCardSlotCmd>()
             .add_message::<net::SvcOpenMenuCmd>();
 
+        app.add_systems(Update, crate::mk2rs_menu::handle_input);
         frame::register_ui_contracts(app);
         crate::overhead_names::register(app);
         app.add_message::<LifeStarted>()
@@ -344,6 +346,7 @@ fn ensure_hud_root(mut commands: Commands, existing: Query<Entity, With<HudRoot>
             spawn_hud_elems(root);
             spawn_targetmap(root);
             crate::menus::spawn_script_menus(root);
+            crate::mk2rs_menu::spawn_menu(root);
         });
 }
 
