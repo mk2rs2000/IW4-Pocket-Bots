@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use frame::{ClientSet, register_ui_contracts};
 
+use crate::bot_button::register_bot_button_systems;
 use crate::classes::equip_txn::register_equip_systems;
 use crate::classes::select::ClassSelectPlugin;
 use crate::gap_hud::register_gap_hud_systems;
@@ -37,5 +38,6 @@ impl Plugin for UiPlugin {
         register_equip_systems(app);
         register_gap_hud_systems(app);
         crate::menu_load::register_menu_load_systems(app);
+        register_bot_button_systems(app);
     }
 }

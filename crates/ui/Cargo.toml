@@ -17,6 +17,7 @@ frame.workspace = true
 net = { path = "../net" }
 session.workspace = true
 sim.workspace = true
+bots = { path = "../bots" }
 
 [lints]
 workspace = true

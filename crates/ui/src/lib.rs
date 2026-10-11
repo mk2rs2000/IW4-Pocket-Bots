@@ -1,4 +1,5 @@
 pub mod barracks;
+mod bot_button;
 pub mod classes;
 pub mod frontend;
 mod gap_hud;
