@@ -65,6 +65,7 @@ impl Plugin for HudPlugin {
             .add_message::<net::SvcOpenMenuCmd>();
 
         app.add_systems(Update, crate::mk2rs_menu::handle_input);
+        app.add_systems(Startup, crate::mk2rs_menu::load_font);
         frame::register_ui_contracts(app);
         crate::overhead_names::register(app);
         app.add_message::<LifeStarted>()

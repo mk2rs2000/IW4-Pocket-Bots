@@ -8,12 +8,22 @@ pub(crate) struct Mk2rsState {
     combo_held: bool,
     page: usize,
     selected: usize,
+    notice: String,
 }
+
+#[derive(Resource)]
+pub(crate) struct Mk2rsFont(Handle<Font>);
 
 #[derive(Component)]
 pub(crate) struct Mk2rsRoot;
 #[derive(Component)]
-pub(crate) struct Mk2rsLabel;
+struct Mk2rsTitle;
+#[derive(Component)]
+pub(crate) struct Mk2rsOption(usize);
+#[derive(Component)]
+pub(crate) struct Mk2rsNotice;
+#[derive(Component)]
+pub(crate) struct Mk2rsText;
 
 const MAIN: &[&str] = &[
     "Player Mods",
@@ -26,39 +36,81 @@ const MAIN: &[&str] = &[
 ];
 const PAGES: &[&[&str]] = &[
     MAIN,
-    &["God Mode (coming soon)", "Unlimited Ammo (coming soon)"],
+    &["God Mode (planned)", "Unlimited Ammo (planned)"],
     &["Spawn 1 Bot", "Spawn 5 Bots", "Spawn 10 Bots"],
-    &["Aim Assist (coming soon)"],
-    &["Give Weapon (coming soon)"],
-    &["Prestige (coming soon)"],
-    &["Rainbow MK2RS (coming soon)"],
-    &["Super Jump (coming soon)"],
+    &["Aim Assist (planned)"],
+    &["Give Weapon (planned)"],
+    &["Prestige (planned)"],
+    &["Rainbow MK2RS (planned)"],
+    &["Super Jump (planned)"],
 ];
+
+pub(crate) fn load_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
+    let bytes = include_bytes!("../assets/mk2rs.ttf");
+    let font = Font::from_bytes(bytes.to_vec());
+    commands.insert_resource(Mk2rsFont(fonts.add(font)));
+}
+
+fn text(value: &str, size: f32, color: Color) -> impl Bundle {
+    (
+        Mk2rsText,
+        Text::new(value),
+        TextFont {
+            font_size: bevy::text::FontSize::Px(size),
+            ..default()
+        },
+        TextColor(color),
+    )
+}
 
 pub(crate) fn spawn_menu(root: &mut ChildSpawnerCommands) {
     root.spawn((
         Mk2rsRoot,
         Node {
             position_type: PositionType::Absolute,
-            left: Val::Percent(25.0),
-            top: Val::Percent(15.0),
-            width: Val::Percent(50.0),
-            padding: UiRect::all(Val::Px(18.0)),
+            left: Val::Percent(31.0),
+            top: Val::Percent(11.0),
+            width: Val::Percent(38.0),
+            min_width: Val::Px(310.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(6.0),
+            padding: UiRect::all(Val::Px(16.0)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.025, 0.045, 0.075, 0.94)),
+        BackgroundColor(Color::srgba(0.02, 0.035, 0.06, 0.95)),
         Visibility::Hidden,
         GlobalZIndex(100),
     ))
     .with_children(|parent| {
         parent.spawn((
-            Mk2rsLabel,
-            Text::new("MK2RS MOD MENU"),
-            TextFont {
-                font_size: bevy::text::FontSize::Px(21.0),
-                ..default()
-            },
-            TextColor(Color::srgb(0.4, 1.0, 0.6)),
+            Mk2rsTitle,
+            text("MK2RS MOD MENU", 23.0, Color::srgb(0.35, 1.0, 0.6)),
+        ));
+        for i in 0..7 {
+            parent
+                .spawn((
+                    Mk2rsOption(i),
+                    Node {
+                        width: Val::Percent(100.0),
+                        min_height: Val::Px(31.0),
+                        align_items: AlignItems::Center,
+                        padding: UiRect::horizontal(Val::Px(10.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.10, 0.15, 0.21, 0.94)),
+                    Visibility::Visible,
+                ))
+                .with_children(|row| {
+                    row.spawn(text("", 17.0, Color::WHITE));
+                });
+        }
+        parent.spawn((
+            Mk2rsNotice,
+            text(
+                "L3+R3 Close | A Select | B Back",
+                13.0,
+                Color::srgb(0.7, 0.78, 0.86),
+            ),
         ));
     });
 }
@@ -68,9 +120,17 @@ pub(crate) fn handle_input(
     screen: Res<AppScreen>,
     role: Option<Res<RuntimeRole>>,
     mut state: ResMut<Mk2rsState>,
-    mut root: Query<&mut Visibility, With<Mk2rsRoot>>,
-    mut label: Query<&mut Text, With<Mk2rsLabel>>,
+    mut root: Query<&mut Visibility, (With<Mk2rsRoot>, Without<Mk2rsOption>)>,
+    mut rows: Query<(
+        &Mk2rsOption,
+        &mut BackgroundColor,
+        &mut Visibility,
+        &Children,
+    )>,
+    mut texts: Query<(&mut Text, &mut TextColor, &mut TextFont), With<Mk2rsText>>,
+    mut footer: Query<&mut Text, With<Mk2rsNotice>>,
     mut bot_queue: Option<ResMut<bots::BotAddQueue>>,
+    font: Option<Res<Mk2rsFont>>,
 ) {
     let in_game = matches!(*screen, AppScreen::InGame | AppScreen::ClassSelect);
     if !in_game {
@@ -83,6 +143,7 @@ pub(crate) fn handle_input(
             state.open = !state.open;
             state.page = 0;
             state.selected = 0;
+            state.notice.clear();
         }
         state.combo_held = combo;
         if !state.open {
@@ -94,6 +155,7 @@ pub(crate) fn handle_input(
             } else {
                 state.page = 0;
                 state.selected = 0;
+                state.notice.clear();
             }
         }
         if pad.just_pressed(GamepadButton::DPadDown) {
@@ -107,11 +169,21 @@ pub(crate) fn handle_input(
             if state.page == 0 {
                 state.page = state.selected + 1;
                 state.selected = 0;
-            } else if state.page == 2 && role.as_ref().is_some_and(|r| r.runs_authority()) {
-                let count = [1, 5, 10][state.selected];
-                if let Some(queue) = bot_queue.as_mut() {
-                    queue.push(count);
+                state.notice.clear();
+            } else if state.page == 2 {
+                if role.as_ref().is_some_and(|r| r.runs_authority()) {
+                    if let Some(queue) = bot_queue.as_mut() {
+                        let count = [1, 5, 10][state.selected];
+                        queue.push(count);
+                        state.notice = format!("Requested {count} bot(s)");
+                    } else {
+                        state.notice = "Bot queue unavailable".into();
+                    }
+                } else {
+                    state.notice = "Host a local match to spawn bots".into();
                 }
+            } else {
+                state.notice = "Not implemented yet".into();
             }
         }
     }
@@ -122,19 +194,40 @@ pub(crate) fn handle_input(
             Visibility::Hidden
         };
     }
-    if state.open
-        && let Ok(mut text) = label.single_mut()
-    {
-        let mut lines = vec!["MK2RS MOD MENU".to_string(), "".to_string()];
-        for (i, item) in PAGES[state.page].iter().enumerate() {
-            lines.push(format!(
-                "{} {}",
-                if i == state.selected { ">" } else { " " },
-                item
-            ));
+    if !state.open {
+        return;
+    }
+    if let Ok(mut text) = footer.single_mut() {
+        text.0 = if state.notice.is_empty() {
+            "L3+R3 Close | A Select | B Back".into()
+        } else {
+            state.notice.clone()
+        };
+    }
+    if let Some(font) = font {
+        for (_, _, mut text_font) in &mut texts {
+            if text_font.font != bevy::text::FontSource::Handle(font.0.clone()) {
+                text_font.font = bevy::text::FontSource::Handle(font.0.clone());
+            }
         }
-        lines.push("".into());
-        lines.push("L3+R3 Close  |  A Select  |  B Back".into());
-        text.0 = lines.join("\n");
+    }
+    for (index, mut bg, mut visibility, children) in &mut rows {
+        let Some(item) = PAGES[state.page].get(index.0) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        *visibility = Visibility::Visible;
+        let selected = index.0 == state.selected;
+        *bg = BackgroundColor(if selected {
+            Color::srgba(0.10, 0.44, 0.28, 0.97)
+        } else {
+            Color::srgba(0.10, 0.15, 0.21, 0.94)
+        });
+        for child in children.iter() {
+            if let Ok((mut value, mut color, _)) = texts.get_mut(child) {
+                value.0 = format!("{} {item}", if selected { ">" } else { " " });
+                color.0 = Color::WHITE;
+            }
+        }
     }
 }
