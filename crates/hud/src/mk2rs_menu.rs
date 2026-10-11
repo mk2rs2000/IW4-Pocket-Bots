@@ -36,7 +36,7 @@ const MAIN: &[&str] = &[
 ];
 const PAGES: &[&[&str]] = &[
     MAIN,
-    &["God Mode (planned)", "Unlimited Ammo (planned)"],
+    &["God Mode (planned)", "Infinite Ammo (not implemented)"],
     &["Spawn 1 Bot", "Spawn 5 Bots", "Spawn 10 Bots"],
     &["Aim Assist (planned)"],
     &["Give Weapon (planned)"],
@@ -72,6 +72,7 @@ pub(crate) fn spawn_menu(root: &mut ChildSpawnerCommands) {
             top: Val::Percent(11.0),
             width: Val::Percent(38.0),
             min_width: Val::Px(310.0),
+            display: Display::None,
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(6.0),
             padding: UiRect::all(Val::Px(16.0)),
@@ -98,7 +99,7 @@ pub(crate) fn spawn_menu(root: &mut ChildSpawnerCommands) {
                         ..default()
                     },
                     BackgroundColor(Color::srgba(0.10, 0.15, 0.21, 0.94)),
-                    Visibility::Visible,
+                    Visibility::Hidden,
                 ))
                 .with_children(|row| {
                     row.spawn(text("", 17.0, Color::WHITE));
@@ -120,7 +121,7 @@ pub(crate) fn handle_input(
     screen: Res<AppScreen>,
     role: Option<Res<RuntimeRole>>,
     mut state: ResMut<Mk2rsState>,
-    mut root: Query<&mut Visibility, (With<Mk2rsRoot>, Without<Mk2rsOption>)>,
+    mut root: Query<(&mut Visibility, &mut Node), (With<Mk2rsRoot>, Without<Mk2rsOption>)>,
     mut rows: Query<(
         &Mk2rsOption,
         &mut BackgroundColor,
@@ -135,7 +136,7 @@ pub(crate) fn handle_input(
     mut bot_queue: Option<ResMut<bots::BotAddQueue>>,
     font: Option<Res<Mk2rsFont>>,
 ) {
-    let in_game = matches!(*screen, AppScreen::InGame | AppScreen::ClassSelect);
+    let in_game = matches!(*screen, AppScreen::InGame);
     if !in_game {
         state.open = false;
         state.combo_held = false;
@@ -190,14 +191,22 @@ pub(crate) fn handle_input(
             }
         }
     }
-    if let Ok(mut visibility) = root.single_mut() {
+    if let Ok((mut visibility, mut node)) = root.single_mut() {
         *visibility = if state.open {
             Visibility::Visible
         } else {
             Visibility::Hidden
         };
+        node.display = if state.open {
+            Display::Flex
+        } else {
+            Display::None
+        };
     }
     if !state.open {
+        for (_, _, mut visibility, _) in &mut rows {
+            *visibility = Visibility::Hidden;
+        }
         return;
     }
     if let Ok(mut text) = footer.single_mut() {
