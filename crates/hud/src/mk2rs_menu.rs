@@ -127,7 +127,10 @@ pub(crate) fn handle_input(
         &mut Visibility,
         &Children,
     )>,
-    mut texts: Query<(&mut Text, &mut TextColor, &mut TextFont), With<Mk2rsText>>,
+    mut texts: Query<
+        (&mut Text, &mut TextColor, &mut TextFont),
+        (With<Mk2rsText>, Without<Mk2rsNotice>),
+    >,
     mut footer: Query<&mut Text, With<Mk2rsNotice>>,
     mut bot_queue: Option<ResMut<bots::BotAddQueue>>,
     font: Option<Res<Mk2rsFont>>,
