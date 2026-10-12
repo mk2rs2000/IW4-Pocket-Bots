@@ -754,6 +754,8 @@ async fn prepare_common(key: CommonKey) -> Arc<CommonSet> {
     .collect();
 
     let mut camouflage_images = None;
+    // Temporarily skip T5 camo preparation and image decoding on iOS.
+    #[cfg(not(target_os = "ios"))]
     if let (Some((_, options)), Some((_, choices))) = (
         cac_tables.iter().find(|(ns, t)| {
             *ns == asset_core::AssetNamespace::T5

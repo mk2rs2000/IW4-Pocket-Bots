@@ -7012,17 +7012,24 @@ impl WeaponBuild {
         for row in &mut self.registry.rows {
             row.gun_xmodel_edge =
                 fpv_model_edge(row.gun_xmodel.as_deref(), row.namespace.content(), fpv);
-            row.camo_view_edges = row
-                .camo_models
-                .view
-                .iter()
-                .map(|(slot, name)| {
-                    (
-                        *slot,
-                        fpv_model_edge(Some(name), row.namespace.content(), fpv),
-                    )
-                })
-                .collect();
+            #[cfg(target_os = "ios")]
+            {
+                row.camo_view_edges.clear();
+            }
+            #[cfg(not(target_os = "ios"))]
+            {
+                row.camo_view_edges = row
+                    .camo_models
+                    .view
+                    .iter()
+                    .map(|(slot, name)| {
+                        (
+                            *slot,
+                            fpv_model_edge(Some(name), row.namespace.content(), fpv),
+                        )
+                    })
+                    .collect();
+            }
             row.hand_xmodel_edge =
                 fpv_model_edge(row.hand_xmodel.as_deref(), row.namespace.content(), fpv);
             row.rocket_model_edge =
@@ -7344,17 +7351,24 @@ impl WeaponBuild {
         for row in &mut self.registry.rows {
             row.world_model_edge =
                 world_model_edge(row.world_model.as_deref(), row.namespace.content(), catalog);
-            row.camo_world_edges = row
-                .camo_models
-                .world
-                .iter()
-                .map(|(slot, name)| {
-                    (
-                        *slot,
-                        world_model_edge(Some(name), row.namespace.content(), catalog),
-                    )
-                })
-                .collect();
+            #[cfg(target_os = "ios")]
+            {
+                row.camo_world_edges.clear();
+            }
+            #[cfg(not(target_os = "ios"))]
+            {
+                row.camo_world_edges = row
+                    .camo_models
+                    .world
+                    .iter()
+                    .map(|(slot, name)| {
+                        (
+                            *slot,
+                            world_model_edge(Some(name), row.namespace.content(), catalog),
+                        )
+                    })
+                    .collect();
+            }
             row.attachment_world_model_edges = row
                 .attachment_world_models
                 .iter()
