@@ -200,22 +200,30 @@ pub fn apply_dpvs_cull(
     let eye_cell = planes.cell_for_point(eye);
     let single_cell = single_cell_from_env();
 
-    let mut per_cell: Vec<Vec<PortalView<'_>>> = Vec::with_capacity(dpvs.cell_count);
+    // The old form allocated a Vec for EVERY cell on EVERY frame. Build a
+    // contiguous array of borrowed portal descriptors instead; this reduces
+    // allocator churn without altering any portal visibility or geometry.
+    let portal_count: usize = dpvs.portals_per_cell.iter().map(Vec::len).sum();
+    let mut all_portals: Vec<PortalView<'_>> = Vec::with_capacity(portal_count);
+    let mut offsets = Vec::with_capacity(dpvs.portals_per_cell.len() + 1);
+    offsets.push(0);
     for cell_portals in &dpvs.portals_per_cell {
-        let mut views = Vec::with_capacity(cell_portals.len());
         for p in cell_portals {
             let end = p.vert_start + p.vert_count;
             let verts = dpvs.portal_verts.get(p.vert_start..end).unwrap_or(&[]);
-            views.push(PortalView {
+            all_portals.push(PortalView {
                 plane: p.plane,
                 neighbor: p.neighbor,
                 vertices: verts,
                 hull_axis: p.hull_axis,
             });
         }
-        per_cell.push(views);
+        offsets.push(all_portals.len());
     }
-    let slices: Vec<&[PortalView<'_>]> = per_cell.iter().map(|v| v.as_slice()).collect();
+    let slices: Vec<&[PortalView<'_>]> = offsets
+        .windows(2)
+        .map(|bounds| &all_portals[bounds[0]..bounds[1]])
+        .collect();
     let graph = CellPortalGraph { portals: &slices };
 
     let mut words = vec![0u32; words_for_bits(dpvs.cell_count.max(1))];
@@ -226,7 +234,11 @@ pub fn apply_dpvs_cull(
         Some(cell) if single_cell => vis.set(cell),
 
         Some(cell) => {
-            let mut cell_clips = vec![CellClipPlanes::EMPTY; dpvs.cell_count];
+            // Reuse last frame's owned buffer rather than allocating one
+            // per frame. Reset all elements before the portal traversal.
+            let mut cell_clips = std::mem::take(&mut stats.cell_clips);
+            cell_clips.resize(dpvs.cell_count, CellClipPlanes::EMPTY);
+            cell_clips.fill(CellClipPlanes::EMPTY);
             let mut later_clips = std::mem::take(&mut stats.cell_clips_later);
             let bevels = lock_pvs.dpvs_portal_bevels(&prepared);
             walk_stats = visit_cells(

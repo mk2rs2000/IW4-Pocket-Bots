@@ -46,6 +46,9 @@ mod apple {
 
     unsafe extern "C" {
         pub fn malloc_zone_statistics(zone: *mut libc::c_void, stats: *mut MallocStats);
+        // Apple malloc: ask zones to return free pages to the operating system.
+        // This cannot free live weapon data, GPU textures or other owned objects.
+        pub fn malloc_zone_pressure_relief(zone: *mut libc::c_void, goal: usize) -> usize;
         pub fn os_proc_available_memory() -> usize;
         pub fn sysctlbyname(
             name: *const libc::c_char,
@@ -61,7 +64,13 @@ mod apple {
         let mut len: libc::size_t = 0;
         // SAFETY: first call only asks for the size.
         let rc = unsafe {
-            sysctlbyname(cname.as_ptr(), std::ptr::null_mut(), &raw mut len, std::ptr::null_mut(), 0)
+            sysctlbyname(
+                cname.as_ptr(),
+                std::ptr::null_mut(),
+                &raw mut len,
+                std::ptr::null_mut(),
+                0,
+            )
         };
         if rc != 0 || len == 0 || len > 256 {
             return None;
@@ -69,7 +78,13 @@ mod apple {
         let mut buf = vec![0u8; len];
         // SAFETY: buffer is `len` bytes long.
         let rc = unsafe {
-            sysctlbyname(cname.as_ptr(), buf.as_mut_ptr().cast(), &raw mut len, std::ptr::null_mut(), 0)
+            sysctlbyname(
+                cname.as_ptr(),
+                buf.as_mut_ptr().cast(),
+                &raw mut len,
+                std::ptr::null_mut(),
+                0,
+            )
         };
         if rc != 0 {
             return None;
@@ -133,6 +148,23 @@ pub fn heap_bytes() -> Option<(u64, u64)> {
         // SAFETY: a null zone asks for totals over all zones; the struct matches the ABI.
         unsafe { apple::malloc_zone_statistics(std::ptr::null_mut(), &raw mut stats) };
         Some((stats.size_in_use as u64, stats.size_allocated as u64))
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        None
+    }
+}
+
+/// Request that the Darwin allocator release *unused* pages it already owns.
+/// The caller must throttle this: it can take time and cause frame hitching.
+/// Returns bytes reported released by malloc; it is not a direct measurement of
+/// physical footprint reduction. This operation does not discard live assets.
+pub fn relieve_allocator_pressure() -> Option<u64> {
+    #[cfg(target_os = "ios")]
+    {
+        // SAFETY: null zone applies to the default allocator; goal=0 requests
+        // maximum reclaimable memory. The allocator synchronizes its own zones.
+        Some(unsafe { apple::malloc_zone_pressure_relief(std::ptr::null_mut(), 0) } as u64)
     }
     #[cfg(not(target_os = "ios"))]
     {
@@ -295,9 +327,15 @@ fn scrub_application_ids(text: &str) -> String {
         let head = &rest[..at];
         let keep = head
             .rfind(|c: char| {
-                c.is_whitespace() || matches!(c, '`' | '"' | '\'' | '(' | '[' | ':' | ',' | '=' | '|' | ';')
+                c.is_whitespace()
+                    || matches!(
+                        c,
+                        '`' | '"' | '\'' | '(' | '[' | ':' | ',' | '=' | '|' | ';'
+                    )
             })
-            .map_or(0, |i| i + head[i..].chars().next().map_or(1, char::len_utf8));
+            .map_or(0, |i| {
+                i + head[i..].chars().next().map_or(1, char::len_utf8)
+            });
         out.push_str(&rest[..keep]);
         out.push_str("<app>");
         let after = &rest[at + MARK.len()..];
@@ -327,7 +365,9 @@ mod tests {
 
     #[test]
     fn other_application_ids_are_scrubbed() {
-        let line = format!("candidates: /private/var/mobile/Containers/Data/Application/{ID}/Documents/Games, `/var/mobile/Containers/Data/Application/{ID}`");
+        let line = format!(
+            "candidates: /private/var/mobile/Containers/Data/Application/{ID}/Documents/Games, `/var/mobile/Containers/Data/Application/{ID}`"
+        );
         let got = anonymize_paths(&line, None);
         assert!(!got.contains(ID), "{got}");
         assert!(got.contains("<app>/Documents/Games"));
@@ -365,8 +405,14 @@ mod tests {
 
     #[test]
     fn merge_into_empty_and_back_to_auto() {
-        assert_eq!(merge_env_lines("", &[("IW4L_TIER", Some("mid"))]), "IW4L_TIER=mid\n");
-        assert_eq!(merge_env_lines("IW4L_TIER=mid\n", &[("IW4L_TIER", None)]), "");
+        assert_eq!(
+            merge_env_lines("", &[("IW4L_TIER", Some("mid"))]),
+            "IW4L_TIER=mid\n"
+        );
+        assert_eq!(
+            merge_env_lines("IW4L_TIER=mid\n", &[("IW4L_TIER", None)]),
+            ""
+        );
     }
 
     #[test]
@@ -379,7 +425,9 @@ mod tests {
     #[test]
     fn noisy_lines_are_filtered() {
         assert!(is_log_noise("destructible death husk x: unresolved"));
-        assert!(is_log_noise("world report: destructible death toy_a: clip=absent"));
+        assert!(is_log_noise(
+            "world report: destructible death toy_a: clip=absent"
+        ));
         assert!(is_log_noise("static model mesh: foo (2 surfaces)"));
         assert!(!is_log_noise("static models: 3356 authored slots"));
     }

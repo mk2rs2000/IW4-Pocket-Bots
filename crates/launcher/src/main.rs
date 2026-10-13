@@ -58,6 +58,10 @@ fn spawn_memory_logger() {
         let mut last_mb = 0u64;
         let mut last_log = std::time::Instant::now();
         let mut last_classes = std::time::Instant::now();
+        // Memory reclaim is on this background logger, not the render thread.
+        // At most once every 30 seconds to avoid allocator-induced stuttering.
+        let mut last_relief = std::time::Instant::now();
+        let relief_enabled = std::env::var("IW4L_MEMORY_RELIEF").as_deref() != Ok("0");
         loop {
             if let Some(huge) = diag::take_last_huge() {
                 diag::boot_crumb(&format!("big allocation: {} MB requested", huge / (1024 * 1024)));
@@ -78,6 +82,31 @@ fn spawn_memory_logger() {
                 footprint,
                 diag::ios_env::available_bytes().unwrap_or(0) / (1024 * 1024),
             );
+            // Only try to return unused malloc pages under genuine pressure.
+            // These figures are *not* a promise of available game memory.
+            if relief_enabled
+                && last_relief.elapsed() >= std::time::Duration::from_secs(30)
+            {
+                if let (Some(available), Some((used, reserved))) = (
+                    diag::ios_env::available_bytes(),
+                    diag::ios_env::heap_bytes(),
+                ) {
+                    const MIB: u64 = 1024 * 1024;
+                    if available < 256 * MIB && reserved.saturating_sub(used) > 64 * MIB {
+                        // Rate limit attempts even if no pages can be reclaimed.
+                        last_relief = std::time::Instant::now();
+                        let before = diag::ios_env::footprint_bytes().unwrap_or(0);
+                        let started = std::time::Instant::now();
+                        let released = diag::ios_env::relieve_allocator_pressure().unwrap_or(0);
+                        let after = diag::ios_env::footprint_bytes().unwrap_or(0);
+                        diag::boot_crumb(&format!(
+                            "iOS memory relief: malloc reported {} MiB, footprint {} -> {} MiB, elapsed {:.1} ms, available before {} MiB",
+                            released / MIB, before / MIB, after / MIB,
+                            started.elapsed().as_secs_f64() * 1000.0, available / MIB
+                        ));
+                    }
+                }
+            }
             let changed = footprint.abs_diff(last_mb) >= 40;
             if changed || last_log.elapsed() >= std::time::Duration::from_secs(2) {
                 let available_mb = diag::ios_env::available_bytes().unwrap_or(0) / (1024 * 1024);
@@ -116,10 +145,19 @@ extern "C" fn fatal_signal(signal: libc::c_int) {
 
 #[cfg(target_os = "ios")]
 fn install_signal_logging() {
-    for signal in [libc::SIGSEGV, libc::SIGABRT, libc::SIGBUS, libc::SIGILL, libc::SIGTRAP] {
+    for signal in [
+        libc::SIGSEGV,
+        libc::SIGABRT,
+        libc::SIGBUS,
+        libc::SIGILL,
+        libc::SIGTRAP,
+    ] {
         // SAFETY: installing a plain C handler at startup.
         unsafe {
-            libc::signal(signal, fatal_signal as extern "C" fn(libc::c_int) as libc::sighandler_t);
+            libc::signal(
+                signal,
+                fatal_signal as extern "C" fn(libc::c_int) as libc::sighandler_t,
+            );
         }
     }
 }
