@@ -91,7 +91,7 @@ pub async fn load_prepared_match(
                 .into(),
         );
     }
-    if keep && let (Some(zone), Some(common)) = (stamp, common) {
+    if keep && let (Some(zone), Some(common)) = (stamp, common.as_ref()) {
         let keeping = std::time::Instant::now();
         let resident = prepared.clone();
         prepared.report.push(format!(
@@ -104,9 +104,26 @@ pub async fn load_prepared_match(
             .lock()
             .unwrap_or_else(|poison| poison.into_inner()) = Some(ResidentMap {
             zone,
-            common,
+            common: Arc::clone(common),
             prepared: resident,
         });
+    }
+    // Low-memory iOS policy: no extra prepared common_mp copy alongside the
+    // fully built match. The live weapon registry and match assets remain owned
+    // by `prepared`, not by COMMON. An explicit opt-out helps A/B testing.
+    #[cfg(target_os = "ios")]
+    if !keep && std::env::var_os("IW4L_KEEP_COMMON_CACHE").is_none() {
+        if let Some(common) = common.as_ref() {
+            if super::common_cache::release_match_common_cache(common) {
+                prepared.report.push(
+                    "iOS memory: released prepared common asset cache after match load (weapons preserved; next map may load slower)".into(),
+                );
+                diag::info!(
+                    World,
+                    "iOS memory: reusable common cache evicted after match load"
+                );
+            }
+        }
     }
     prepared.report.extend(progress.timing_report());
     MatchLoadOutcome::Ready(prepared)

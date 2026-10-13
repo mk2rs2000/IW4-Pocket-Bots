@@ -225,6 +225,28 @@ pub(super) async fn ensure_common(key: CommonKey) -> (Arc<CommonSet>, &'static s
     }
 }
 
+/// Drop the reusable common cache after a successful iOS match load.
+///
+/// A prepared match owns its own published weapon registry and render assets;
+/// the common cache is only needed to make *future* loads faster. Releasing the
+/// cache can reduce memory pressure during a match, at the cost of preparing
+/// common_mp again the next time a different match is loaded.
+///
+/// Only evict the exact completed set used by this load. This protects another
+/// concurrent load that might already have replaced COMMON.
+pub(super) fn release_match_common_cache(loaded: &Arc<CommonSet>) -> bool {
+    let mut slot = COMMON.lock().unwrap_or_else(|poison| poison.into_inner());
+    let matches_current = slot
+        .as_ref()
+        .and_then(|flight| flight.set.get())
+        .and_then(|result| result.as_ref())
+        .is_some_and(|current| Arc::ptr_eq(current, loaded));
+    if matches_current {
+        slot.take();
+    }
+    matches_current
+}
+
 pub struct ShellCommon {
     pub weapons: WeaponRegistry,
     pub strings: LocalizeCatalog,
