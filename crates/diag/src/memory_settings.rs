@@ -245,6 +245,8 @@ pub fn valid_file_setting(name: &str, value: &str) -> bool {
         "IW4L_DT_SNAP" | "IW4L_FRAME_STATS" => matches!(value, "0" | "1"),
         // Render on its own thread, one frame behind the main loop (off by default).
         "IW4L_PIPELINED_RENDERING" => matches!(value, "0" | "1"),
+        // IW4L_MAP_PIPELINE_TRIM_V3: reversible iOS map-load optimisation.
+        "IW4L_MAP_PIPELINE_TRIM" => matches!(value, "0" | "1"),
         // A/B test the allocator-pressure experiment without rebuilding.
         "IW4L_MEMORY_RELIEF" => matches!(value, "0" | "1"),
         _ => false,

@@ -240,6 +240,26 @@ fn approve_map_load(
             .err()
             .or_else(|| common_mp.as_ref().err())
             .cloned();
+        // IW4L_MAP_PIPELINE_TRIM_V3: give Terminal and Scrapyard a concrete
+        // Steam-assets check in the boot log. This does NOT manufacture FF files
+        // or replace original game data. It only reports the paths discovered.
+        if matches!(zone.as_str(), "mp_boneyard" | "mp_terminal") {
+            let show = |file: &Result<PathBuf, String>| match file {
+                Ok(path) => format!(
+                    "{} ({} bytes)",
+                    path.display(),
+                    std::fs::metadata(path).map(|m| m.len()).unwrap_or(0),
+                ),
+                Err(cause) => format!("MISSING ({cause})"),
+            };
+            diag::info!(
+                World,
+                "map asset check: {} zone={} common_mp={}",
+                zone,
+                show(&zone_ff),
+                show(&common_mp),
+            );
+        }
         if let Some(error) = error {
             failed.write(MapLoadFailed {
                 request_id: request.request_id,

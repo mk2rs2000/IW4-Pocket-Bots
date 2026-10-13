@@ -143,6 +143,14 @@ pub(super) fn kick_admitted_pipelines(
             );
         }
 
+        if cfg!(target_os = "ios") {
+            diag::info!(
+                World,
+                "map pipeline trim V3: enabled={} shadows_forced_off={} (all shaders and on-demand pipelines preserved)",
+                std::env::var("IW4L_MAP_PIPELINE_TRIM").as_deref() != Ok("0"),
+                diag::session::shadows_forced_off(),
+            );
+        }
         kicked.current.clear();
         kicked.scheduled.clear();
         kicked.generation = Some(extracted.world.generation);
@@ -208,6 +216,14 @@ fn schedule_admitted_pipelines(
     scheduled: &mut HashSet<ExactColourPipelineKey>,
     current: &mut Vec<ExactPipelineSlot>,
 ) {
+    // IW4L_MAP_PIPELINE_TRIM_V3: iOS loads many more GPU pipeline variants than
+    // the first scene uses. Keep every material port available, but don't eagerly
+    // create optional pipelines during the high-water map-loading phase.
+    // The exact-pipeline registry still discovers and builds missing keys on use.
+    // Opt out with IW4L_MAP_PIPELINE_TRIM=0 in the app's iw4l-env.txt.
+    let trim_ios_prewarm =
+        cfg!(target_os = "ios") && std::env::var("IW4L_MAP_PIPELINE_TRIM").as_deref() != Ok("0");
+    let skip_shadow_prewarm = trim_ios_prewarm && diag::session::shadows_forced_off();
     for (main_format, samples) in view_sig.iter().copied() {
         let techs = lighting_iw4::LIT_TECH_NO_SHADOW_DIR_SLOTS
             .into_iter()
@@ -216,10 +232,37 @@ fn schedule_admitted_pipelines(
             .chain(lighting_iw4::LIT_TECH_SHADOW_SPOT_SLOTS)
             .chain([super::super::SUN_SHADOW_CASTER_TECH, 5]);
         for tech in techs {
+            // The user has explicitly disabled dynamic shadows, or the device
+            // cannot draw them. Do not prewarm their GPU variants up front.
+            // If a shader is unexpectedly needed, lazy discovery still works.
+            if skip_shadow_prewarm
+                && (tech == super::super::SUN_SHADOW_CASTER_TECH
+                    || lighting_iw4::LIT_TECH_SHADOW_DIR_SLOTS.contains(&tech)
+                    || lighting_iw4::LIT_TECH_SHADOW_SPOT_SLOTS.contains(&tech))
+            {
+                continue;
+            }
             let shadow = tech == super::super::SUN_SHADOW_CASTER_TECH;
             for (material, prepared_pass) in
                 prepared_table.passes_for_tech(super::super::TechType(tech))
             {
+                // Emissive tech (5) previously prewarmed *every* catalogue
+                // material, including variants unused by this map. First warm
+                // only materials seen in the installed world/static models.
+                // UI, viewmodel and effect variants can build on actual use.
+                if trim_ios_prewarm
+                    && tech == 5
+                    && !extracted
+                        .frame
+                        .pipeline_world_materials
+                        .contains(&material.0)
+                    && !extracted
+                        .frame
+                        .pipeline_smodel_materials
+                        .contains(&material.0)
+                {
+                    continue;
+                }
                 let state = super::super::state::GfxPassState::from_bits(prepared_pass.state);
                 let state0 = state.apply_change_state_0_host(AlphaMode::Opaque, false);
                 let state1 = state.apply_change_state_1_host();
