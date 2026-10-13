@@ -116,10 +116,19 @@ extern "C" fn fatal_signal(signal: libc::c_int) {
 
 #[cfg(target_os = "ios")]
 fn install_signal_logging() {
-    for signal in [libc::SIGSEGV, libc::SIGABRT, libc::SIGBUS, libc::SIGILL, libc::SIGTRAP] {
+    for signal in [
+        libc::SIGSEGV,
+        libc::SIGABRT,
+        libc::SIGBUS,
+        libc::SIGILL,
+        libc::SIGTRAP,
+    ] {
         // SAFETY: installing a plain C handler at startup.
         unsafe {
-            libc::signal(signal, fatal_signal as extern "C" fn(libc::c_int) as libc::sighandler_t);
+            libc::signal(
+                signal,
+                fatal_signal as extern "C" fn(libc::c_int) as libc::sighandler_t,
+            );
         }
     }
 }

@@ -557,8 +557,13 @@ pub fn decode_in_zone_builtin_images(catalog: &mut MaterialDefinitions) -> usize
             ios_fit_for_gpu(&mips, packed)
         };
         #[cfg(not(target_os = "ios"))]
-        let (storage, payload, out_w, out_h, levels) =
-            (mips.storage, mips.packed.clone(), mips.width, mips.height, mips.level_count());
+        let (storage, payload, out_w, out_h, levels) = (
+            mips.storage,
+            mips.packed.clone(),
+            mips.width,
+            mips.height,
+            mips.level_count(),
+        );
         let format = DecodedMips::texture_format(storage, is_normal || !image.use_srgb_reads);
         let mut gpu = Image::new_uninit(
             Extent3d {
@@ -691,7 +696,12 @@ impl PreparedPayload {
 impl Drop for PreparedPayload {
     fn drop(&mut self) {
         let bytes = match self {
-            Self::Mips(state) => state.get_mut().unwrap_or_else(|p| p.into_inner()).accounted_bytes,
+            Self::Mips(state) => {
+                state
+                    .get_mut()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .accounted_bytes
+            }
             Self::Cubemap { faces, .. } => faces.iter().map(|face| face.len() as u64).sum(),
         };
         if bytes > 0 {
@@ -1053,7 +1063,9 @@ fn wrap_payload(payload: &PreparedPayload, wrap: WrapRecipe) -> Arc<Image> {
                 format.add_srgb_suffix()
             };
             image.sampler = ImageSampler::Descriptor(sampler_from_iw4(
-                wrap.sampler_state, image.texture_descriptor.mip_level_count, wrap.alpha_test_color,
+                wrap.sampler_state,
+                image.texture_descriptor.mip_level_count,
+                wrap.alpha_test_color,
             ));
             Arc::new(image)
         }
@@ -1066,7 +1078,8 @@ fn wrap_mips(mips: &DecodedMips, data: Vec<u8>, wrap: WrapRecipe) -> Image {
     #[cfg(target_os = "ios")]
     let (storage, data, out_w, out_h, levels) = ios_fit_for_gpu(mips, data);
     #[cfg(not(target_os = "ios"))]
-    let (storage, out_w, out_h, levels) = (mips.storage, mips.width, mips.height, mips.level_count());
+    let (storage, out_w, out_h, levels) =
+        (mips.storage, mips.width, mips.height, mips.level_count());
     let format = DecodedMips::texture_format(storage, wrap.linear());
     let mut image = Image::new_uninit(
         Extent3d {
@@ -2655,14 +2668,24 @@ mod memory_tests {
     use super::*;
 
     fn recipe() -> WrapRecipe {
-        WrapRecipe { sampler_state: 0, is_normal: false, alpha_test_color: false,
-            force_linear: false, use_srgb_reads: true }
+        WrapRecipe {
+            sampler_state: 0,
+            is_normal: false,
+            alpha_test_color: false,
+            force_linear: false,
+            use_srgb_reads: true,
+        }
     }
 
     fn batch(payload: Arc<PreparedPayload>) -> DecodedImageBatch {
         let mut batch = DecodedImageBatch::default();
-        batch.decoded = vec![PreparedImage { name: "test".into(), payload,
-            wrap: recipe(), variant: None, shared: false }];
+        batch.decoded = vec![PreparedImage {
+            name: "test".into(),
+            payload,
+            wrap: recipe(),
+            variant: None,
+            shared: false,
+        }];
         batch
     }
 
@@ -2695,11 +2718,26 @@ mod memory_tests {
     fn alternate_wrapper_preserves_texels_and_dimensions() {
         let payload = PreparedPayload::mips(DecodedMips::single(1, 1, vec![1, 2, 3, 4])).owned();
         let first = wrap_payload(&payload, recipe());
-        let second = wrap_payload(&payload, WrapRecipe { force_linear: true, ..recipe() });
+        let second = wrap_payload(
+            &payload,
+            WrapRecipe {
+                force_linear: true,
+                ..recipe()
+            },
+        );
         assert_eq!(first.data, second.data);
-        assert_eq!(first.texture_descriptor.size, second.texture_descriptor.size);
-        assert_eq!(first.texture_descriptor.mip_level_count, second.texture_descriptor.mip_level_count);
-        assert_ne!(first.texture_descriptor.format, second.texture_descriptor.format);
+        assert_eq!(
+            first.texture_descriptor.size,
+            second.texture_descriptor.size
+        );
+        assert_eq!(
+            first.texture_descriptor.mip_level_count,
+            second.texture_descriptor.mip_level_count
+        );
+        assert_ne!(
+            first.texture_descriptor.format,
+            second.texture_descriptor.format
+        );
         if let PreparedPayload::Mips(state) = payload.as_ref() {
             assert_eq!(state.lock().unwrap().accounted_bytes, image_bytes(&first));
         }
@@ -2714,14 +2752,22 @@ impl PayloadRetention {
         let mut added = 0;
         for image in &batch.decoded {
             let key = Arc::as_ptr(&image.payload) as usize;
-            if self.held.contains_key(&key) { continue; }
+            if self.held.contains_key(&key) {
+                continue;
+            }
             if let PreparedPayload::Mips(state) = image.payload.as_ref()
-                && state.lock().unwrap_or_else(|p| p.into_inner()).images.is_empty()
+                && state
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .images
+                    .is_empty()
             {
                 continue;
             }
             let bytes = image.payload.bytes();
-            if !diag::memory_settings::admits_bytes(self.bytes, bytes, limit) { continue; }
+            if !diag::memory_settings::admits_bytes(self.bytes, bytes, limit) {
+                continue;
+            }
             self.held.insert(key, Arc::clone(&image.payload));
             self.bytes += bytes;
             added += bytes;
@@ -3553,7 +3599,6 @@ fn decode_inline(
     stats
 }
 
-
 #[cfg(target_os = "ios")]
 unsafe extern "C" {
     fn os_proc_available_memory() -> usize;
@@ -3585,7 +3630,10 @@ fn ios_texture_cap() -> u32 {
         // SAFETY: no arguments, returns a byte count (iOS 13+).
         let budget_mb = unsafe { os_proc_available_memory() } / (1024 * 1024);
         let (cap, why) = match from_file {
-            Some(cap) => (cap, "set by you (IW4 Pocket options or iw4l-texture-cap.txt)"),
+            Some(cap) => (
+                cap,
+                "set by you (IW4 Pocket options or iw4l-texture-cap.txt)",
+            ),
             None if budget_mb < 3500 => (256, "auto, budget under 3.5 GB"),
             None if budget_mb < 5500 => (512, "auto, budget under 5.5 GB"),
             None => (1024, "auto, budget 5.5 GB or more"),
@@ -3598,7 +3646,13 @@ fn ios_texture_cap() -> u32 {
     // Safety valve: when iOS is about to kill the app, shrink everything that loads next.
     // SAFETY: no arguments, returns a byte count (iOS 13+).
     let left_mb = unsafe { os_proc_available_memory() } / (1024 * 1024);
-    if left_mb < 500 { base.min(128) } else if left_mb < 900 { base.min(256) } else { base }
+    if left_mb < 500 {
+        base.min(128)
+    } else if left_mb < 900 {
+        base.min(256)
+    } else {
+        base
+    }
 }
 
 /// Whether the GPU samples BC1/2/3/5 directly. Only Apple9+ iOS GPUs do; until

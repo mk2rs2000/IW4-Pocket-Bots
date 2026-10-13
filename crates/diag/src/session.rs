@@ -11,7 +11,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static PEAK_FOOTPRINT_MIB: AtomicU64 = AtomicU64::new(0);
 static MIN_AVAILABLE_MIB: AtomicU64 = AtomicU64::new(u64::MAX);
 static EXIT_REASON: Mutex<String> = Mutex::new(String::new());
-static SHADOWS_FORCED_OFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static SHADOWS_FORCED_OFF: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Dynamic shadows are held off whatever the game's Shadows option says (the phone
 /// cannot draw them, or IW4 Pocket options turned them off). Set once at startup.
@@ -56,12 +57,20 @@ pub fn set_exit_reason(reason: &str) {
 pub fn summary_line() -> String {
     let peak = PEAK_FOOTPRINT_MIB.load(Ordering::Relaxed);
     let min = MIN_AVAILABLE_MIB.load(Ordering::Relaxed);
-    let min = if min == u64::MAX { "?".to_owned() } else { format!("{min} MiB") };
+    let min = if min == u64::MAX {
+        "?".to_owned()
+    } else {
+        format!("{min} MiB")
+    };
     let reason = EXIT_REASON
         .lock()
         .map(|slot| slot.clone())
         .unwrap_or_default();
-    let reason = if reason.is_empty() { "still running" } else { reason.as_str() };
+    let reason = if reason.is_empty() {
+        "still running"
+    } else {
+        reason.as_str()
+    };
     format!("session summary: peak footprint {peak} MiB | least memory iOS left {min} | {reason}")
 }
 
@@ -89,7 +98,11 @@ pub fn previous_run_note(previous_log: &str) -> String {
         .unwrap_or_default();
     format!(
         "previous run: no exit line, so iOS closed the app (often memory) or you closed it. Last sample: {}",
-        if last_mem.is_empty() { "none" } else { last_mem.as_str() }
+        if last_mem.is_empty() {
+            "none"
+        } else {
+            last_mem.as_str()
+        }
     )
 }
 
@@ -109,7 +122,10 @@ mod tests {
     #[test]
     fn previous_run_clean_exit() {
         let text = "a\n[launch/info] lifecycle: process_exit pid=1 ns=2 code=1\n";
-        assert_eq!(previous_run_note(text), "previous run: ended itself (exit code 1)");
+        assert_eq!(
+            previous_run_note(text),
+            "previous run: ended itself (exit code 1)"
+        );
     }
 
     #[test]

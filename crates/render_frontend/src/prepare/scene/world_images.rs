@@ -31,7 +31,10 @@ mod memory_tests {
     fn shared_image_and_ab_disabled_copy_without_mutating_source() {
         let source = Arc::new(image());
         let out = into_bevy_image(Arc::clone(&source), true);
-        assert_ne!(source.data.as_ref().unwrap().as_ptr(), out.data.as_ref().unwrap().as_ptr());
+        assert_ne!(
+            source.data.as_ref().unwrap().as_ptr(),
+            out.data.as_ref().unwrap().as_ptr()
+        );
         assert_eq!(source.data, out.data);
         let copied = into_bevy_image(Arc::clone(&source), false);
         assert_eq!(copied.data, source.data);
@@ -48,7 +51,8 @@ fn into_bevy_image(image: Arc<Image>, allow_move: bool) -> Image {
     if allow_move {
         match Arc::try_unwrap(image) {
             Ok(image) => {
-                diag::memtrack::IMAGE_MOVED_BYTES.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+                diag::memtrack::IMAGE_MOVED_BYTES
+                    .fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
                 image
             }
             Err(image) => {
@@ -537,7 +541,10 @@ impl WorldImageUpload {
                 // the same sampler, and a second `add` is a second texture.
                 let Some(variant) = variant else {
                     diag::memtrack::add(diag::memtrack::Cat::ImageToGpu, bytes);
-                    return images.add(into_bevy_image(image, diag::memory_settings::get().move_images));
+                    return images.add(into_bevy_image(
+                        image,
+                        diag::memory_settings::get().move_images,
+                    ));
                 };
                 if let Some(handle) = self.exact_by_variant.get(&variant) {
                     if common_owned && self.common_profile_id != 0 {
@@ -563,7 +570,10 @@ impl WorldImageUpload {
                     return handle;
                 }
                 diag::memtrack::add(diag::memtrack::Cat::ImageToGpu, bytes);
-                let handle = images.add(into_bevy_image(image, diag::memory_settings::get().move_images));
+                let handle = images.add(into_bevy_image(
+                    image,
+                    diag::memory_settings::get().move_images,
+                ));
                 if common_owned && self.common_profile_id != 0 {
                     common.by_variant.insert(variant, handle.clone());
                 }

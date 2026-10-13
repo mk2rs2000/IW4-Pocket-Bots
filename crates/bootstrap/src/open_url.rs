@@ -48,14 +48,21 @@ mod ios {
     ) {
         for request in requests.read() {
             if !super::allowed(&request.0) {
-                diag::warn!(Launch, "send logs: refused a link outside the project repository");
+                diag::warn!(
+                    Launch,
+                    "send logs: refused a link outside the project repository"
+                );
                 continue;
             }
             let opened = open(&request.0);
             diag::info!(
                 Launch,
                 "send logs: {}",
-                if opened { "opened the GitHub page" } else { "could not open the GitHub page" }
+                if opened {
+                    "opened the GitHub page"
+                } else {
+                    "could not open the GitHub page"
+                }
             );
         }
     }
@@ -100,10 +107,14 @@ mod tests {
 
     #[test]
     fn only_the_project_repository_is_allowed() {
-        assert!(allowed("https://github.com/MarkusSela/IW4-Pocket/issues/new?title=a&body=b%20c"));
+        assert!(allowed(
+            "https://github.com/MarkusSela/IW4-Pocket/issues/new?title=a&body=b%20c"
+        ));
         assert!(!allowed("https://github.com/someone/else/issues/new"));
         assert!(!allowed("http://github.com/MarkusSela/IW4-Pocket/issues"));
-        assert!(!allowed("https://github.com.evil.example/MarkusSela/IW4-Pocket/"));
+        assert!(!allowed(
+            "https://github.com.evil.example/MarkusSela/IW4-Pocket/"
+        ));
         assert!(!allowed("https://github.com/MarkusSela/IW4-Pocket/\nx"));
         assert!(!allowed("https://github.com/MarkusSela/IW4-Pocket/ x"));
         assert!(!allowed("javascript:alert(1)"));

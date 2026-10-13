@@ -5,8 +5,8 @@
 use bevy::input::ButtonState;
 use bevy::input::InputSystems;
 use bevy::input::gamepad::{
-    GamepadAxis, GamepadButton, GamepadConnection, GamepadConnectionEvent, RawGamepadAxisChangedEvent,
-    RawGamepadButtonChangedEvent, RawGamepadEvent,
+    GamepadAxis, GamepadButton, GamepadConnection, GamepadConnectionEvent,
+    RawGamepadAxisChangedEvent, RawGamepadButtonChangedEvent, RawGamepadEvent,
 };
 use bevy::input::mouse::{MouseButton, MouseButtonInput};
 use bevy::input::touch::{TouchInput, TouchPhase};
@@ -68,9 +68,9 @@ fn read_pad(controller: &GCController) -> Option<([f32; 17], [f32; 4])> {
         let dpad = pad.dpad();
         let left = pad.leftThumbstick();
         let right = pad.rightThumbstick();
-        let optional = |button: Option<Retained<objc2_game_controller::GCControllerButtonInput>>| {
-            button.map_or(0.0, |button| button.value())
-        };
+        let optional = |button: Option<
+            Retained<objc2_game_controller::GCControllerButtonInput>,
+        >| { button.map_or(0.0, |button| button.value()) };
         let buttons = [
             pad.buttonA().value(),
             pad.buttonB().value(),

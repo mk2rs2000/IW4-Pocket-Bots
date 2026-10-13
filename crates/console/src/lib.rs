@@ -25,12 +25,12 @@ pub mod editor;
 mod feature_dispatch;
 mod frontend;
 mod game_folders;
-mod pocket_options;
 mod gamepad;
 pub mod input;
 mod local_account;
 mod local_profile;
 pub mod plugin;
+mod pocket_options;
 pub mod registry;
 mod saved_position;
 mod startup;
@@ -48,11 +48,11 @@ pub use command::{ConsoleCommand, ConsoleQueue, SubmittedCommand};
 pub use editor::ConsoleEditor;
 pub use feature_dispatch::register_feature_commands;
 pub use game_folders::stored_game_folders;
-pub use pocket_options::OpenExternalUrl;
 pub use plugin::{
     ConsoleCommandQueue, ConsoleDispatch, ConsoleDispatchSet, ConsoleFont, ConsolePlugin,
     ConsoleSettings, ConsoleState,
 };
+pub use pocket_options::OpenExternalUrl;
 pub use registry::{ArgCompleter, CommandSpec, ConsoleRegistry, StaticCompleter};
 pub use startup::{startup_commands, strip_cmds_flag};
 pub use synthetic_input::{ConsoleInputState, PRESS_SECONDS, PRESS_TICK_DT_MAX};

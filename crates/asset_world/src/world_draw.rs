@@ -2007,7 +2007,6 @@ fn extract_dpvs(s: &ZoneStream<'_>, g: GfxWorldGeometry) -> Result<DpvsWorldData
     out.checked()
 }
 
-
 /// Lightmap pages are uploaded once and never read back on the CPU. On iOS the GPU shares
 /// the app's memory budget, so keeping a second copy in the main world (and a page is six
 /// images, two of them clones of the others) costs real headroom. Desktop keeps both.

@@ -101,7 +101,8 @@ fn compile_jobs_parallel(
         indices.push(index);
     }
     let nthreads = diag::memory_settings::get()
-        .effective_shader_workers(assets::load_workers()).min(unique.len());
+        .effective_shader_workers(assets::load_workers())
+        .min(unique.len());
     // At most nthreads tasks: smaller chunks alone do NOT limit concurrency
     // on the shared load pool. Preserve spawn/result order for indices below.
     let chunk_len = unique.len().div_ceil(nthreads);

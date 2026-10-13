@@ -47,7 +47,14 @@ pub fn size_class_report() -> String {
     let b = |i: usize| mb(CLASS_BYTES[i].load(Ordering::Relaxed));
     format!(
         "allocs requested: <64KB {}x {}MB | 64KB-1MB {}x {}MB | 1-16MB {}x {}MB | >=16MB {}x {}MB (largest {}MB)",
-        n(0), b(0), n(1), b(1), n(2), b(2), n(3), b(3),
+        n(0),
+        b(0),
+        n(1),
+        b(1),
+        n(2),
+        b(2),
+        n(3),
+        b(3),
         mb(LARGEST.load(Ordering::Relaxed))
     )
 }

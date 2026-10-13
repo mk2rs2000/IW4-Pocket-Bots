@@ -32,7 +32,11 @@ pub(crate) fn exit_process(world: &mut World) {
         return;
     };
     silence_audio(world);
-    diag::session::set_exit_reason(if code == 0 { "left normally" } else { "ended with an error code" });
+    diag::session::set_exit_reason(if code == 0 {
+        "left normally"
+    } else {
+        "ended with an error code"
+    });
     if cfg!(target_os = "ios") {
         diag::boot_note(&diag::session::summary_line());
     }

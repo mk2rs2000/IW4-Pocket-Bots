@@ -91,7 +91,9 @@ pub fn sub(cat: Cat, bytes: u64) {
     let s = slot(cat);
     let _ = s
         .live
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| Some(v.saturating_sub(bytes)));
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+            Some(v.saturating_sub(bytes))
+        });
 }
 
 pub fn live(cat: Cat) -> u64 {

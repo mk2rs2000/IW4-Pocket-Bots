@@ -15,9 +15,9 @@ use bevy::render::render_resource::{
 };
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::settings::WgpuFeatures;
-use std::sync::atomic::{AtomicBool, Ordering};
 use d3d9_sm3::{TEXTURE_TABLE_BINDING_2D, TEXTURE_TABLE_BINDING_3D, TEXTURE_TABLE_BINDING_CUBE};
 use render_material::{MaterialGenerationId, SamplerTextureDimension};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct SamplerKey {
@@ -111,9 +111,7 @@ fn r32_float_identity(identity: UploadedTextureIdentity) -> Option<&'static str>
         UploadedTextureIdentity::Code(c) if c == super::CODE_TEXTURE_SHADOWMAP_SPOT => {
             Some("spot shadow map")
         }
-        UploadedTextureIdentity::Code(c) if c == super::CODE_TEXTURE_FLOATZ => {
-            Some("float depth")
-        }
+        UploadedTextureIdentity::Code(c) if c == super::CODE_TEXTURE_FLOATZ => Some("float depth"),
         UploadedTextureIdentity::SpotShadowRt(_) => Some("spot shadow map"),
         _ => None,
     }
@@ -172,7 +170,11 @@ impl ExactTextureTable {
         }
         let descriptor = TextureDescriptor {
             label: Some("iw4_texture_table_placeholder_white"),
-            size: Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+            size: Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,

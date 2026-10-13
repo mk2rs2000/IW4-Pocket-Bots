@@ -1,18 +1,18 @@
 mod alloc_count;
+pub mod asset_heap;
 pub mod exit;
 pub mod frame_pacing;
 pub mod gap;
-pub mod memtrack;
-pub mod asset_heap;
-pub mod session;
-pub mod memory_settings;
 pub mod ios_env;
+pub mod memory_settings;
+pub mod memtrack;
+pub mod session;
 pub mod wgsl_dump;
 
 pub use alloc_count::{
-    ProcessAllocationStats, ProcessCountingAllocator, counting_enabled, size_class_report, take_last_huge,
+    ProcessAllocationStats, ProcessCountingAllocator, counting_enabled,
     process_allocation_saturated, process_allocation_slots_used, process_allocations,
-    process_live_heap_bytes, release_freed_heap,
+    process_live_heap_bytes, release_freed_heap, size_class_report, take_last_huge,
 };
 
 use std::{
@@ -225,8 +225,14 @@ pub static IOS_TEXTURE_BYTES: std::sync::atomic::AtomicU64 = std::sync::atomic::
 /// iOS has no console: append breadcrumbs to Documents/iw4l-boot.log (visible in Files).
 pub fn boot_crumb(message: &str) {
     if let Some(home) = std::env::var_os("HOME") {
-        let path = std::path::Path::new(&home).join("Documents").join("iw4l-boot.log");
-        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let path = std::path::Path::new(&home)
+            .join("Documents")
+            .join("iw4l-boot.log");
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             use std::io::Write;
             // The shared log names the app folder as `<app>`, not the install id.
             let clean = ios_env::anonymize_paths(message, home.to_str());

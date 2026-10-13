@@ -47,7 +47,10 @@ pub fn begin() -> Mark {
             stack.len() - 1
         })
         .unwrap_or(0);
-    Mark { net: alloc_count::thread_net_bytes(), depth }
+    Mark {
+        net: alloc_count::thread_net_bytes(),
+        depth,
+    }
 }
 
 pub fn end(kind: &'static str, mark: Mark) {
@@ -59,7 +62,12 @@ pub fn end(kind: &'static str, mark: Mark) {
             row.net += grown;
             row.own += own;
         }
-        None => rows.push(Row { kind, count: 1, net: grown, own }),
+        None => rows.push(Row {
+            kind,
+            count: 1,
+            net: grown,
+            own,
+        }),
     }
 }
 
@@ -84,7 +92,9 @@ fn settle(mark: Mark) -> (i64, i64) {
 
 /// One line, largest total growth first, empty when nothing was recorded.
 pub fn report() -> String {
-    let Ok(rows) = ROWS.lock() else { return String::new() };
+    let Ok(rows) = ROWS.lock() else {
+        return String::new();
+    };
     if rows.is_empty() {
         return String::new();
     }
@@ -119,8 +129,18 @@ mod tests {
         ROWS.lock().unwrap().clear();
         {
             let mut rows = ROWS.lock().unwrap();
-            rows.push(Row { kind: "small", count: 2, net: 10 << 20, own: 10 << 20 });
-            rows.push(Row { kind: "big", count: 1, net: 300 << 20, own: 100 << 20 });
+            rows.push(Row {
+                kind: "small",
+                count: 2,
+                net: 10 << 20,
+                own: 10 << 20,
+            });
+            rows.push(Row {
+                kind: "big",
+                count: 1,
+                net: 300 << 20,
+                own: 100 << 20,
+            });
         }
         let line = report();
         assert!(line.find("big").unwrap() < line.find("small").unwrap());

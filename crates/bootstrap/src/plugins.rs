@@ -46,7 +46,9 @@ pub fn add_runtime_plugins_with_role(app: &mut App, role: RuntimeRole) {
         .add_plugins(ReplayPlugin)
         .add_plugins(RenderPlugin)
         .add_plugins(SessionPlugin);
-    app.insert_resource(bevy::render::error_handler::RenderErrorHandler(log_then_quit));
+    app.insert_resource(bevy::render::error_handler::RenderErrorHandler(
+        log_then_quit,
+    ));
     // iOS: ask a 120 Hz display for its full refresh during matches.
     crate::promotion::register(app);
     // iOS: no auto-lock while a map loads or a match runs.
@@ -168,7 +170,9 @@ fn note_gpu_caps(
     // shadow maps cannot be bound. Desktop keeps the game's own Shadows option.
     if cfg!(target_os = "ios") {
         let off = diag::session::shadows_decision(
-            std::env::var(diag::memory_settings::SHADOWS_ENV).ok().as_deref(),
+            std::env::var(diag::memory_settings::SHADOWS_ENV)
+                .ok()
+                .as_deref(),
             device.features().contains(WgpuFeatures::FLOAT32_FILTERABLE),
         );
         diag::session::force_shadows_off(off);
