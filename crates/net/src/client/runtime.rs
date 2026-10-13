@@ -821,7 +821,7 @@ pub fn sample_client_input(
             d[0] * forward[0] + d[1] * forward[1] + d[2] * forward[2] + radius >= 0.0
         };
         let mut targets: Vec<crate::client::pad_aim::AimTarget> = Vec::new();
-        if actions.pad_aim_assist > 0 {
+        if actions.pad_aim_assist > 0 || actions.mk2rs_bot_aim || actions.mk2rs_knife_aim {
             const RADIUS: f32 = 10.0;
             let snapshot = presented.snapshot();
             let team = |id: sim::ClientId| {
@@ -836,6 +836,12 @@ pub fn sample_client_input(
                 .flat_map(|s| s.players.iter().map(|(id, _)| *id))
             {
                 if id == local.0 || (teams && team(id) == mine) {
+                    continue;
+                }
+                // MK2RS_V5_CLASSIC: mod aiming can only acquire host practice bots.
+                if (actions.mk2rs_bot_aim || actions.mk2rs_knife_aim)
+                    && !actions.mk2rs_bot_ids.contains(&u64::from(id.0))
+                {
                     continue;
                 }
                 let Some(other) = presented.player(id).filter(|o| o.pm_type == 0) else {
@@ -870,6 +876,24 @@ pub fn sample_client_input(
         };
         let ads = actions.client.using_ads || actions.client.kb.speed.active;
         crate::client::pad_aim::pad_look_frame(&mut actions, &view, &targets, ads);
+        // Throwing-knife assistance only while holding the lethal button,
+        // with a throwing knife in the equipped lethal slot, against practice bots.
+        let knife_equipped = actions.mk2rs_knife_weapon != 0
+            && presented
+                .snapshot()
+                .and_then(|snapshot| snapshot.meta.for_client(local.0))
+                .and_then(|meta| meta.loadout.as_ref())
+                .is_some_and(|loadout| loadout.lethal == actions.mk2rs_knife_weapon);
+        if actions.mk2rs_knife_aim
+            && knife_equipped
+            && (actions.client.kb.frag.active || actions.client.kb.frag.was_pressed)
+        {
+            if let Some(aim_delta) = crate::client::pad_aim::mk2rs_knife_correction(&view, &targets)
+            {
+                actions.pad_look_delta[0] += aim_delta[0];
+                actions.pad_look_delta[1] += aim_delta[1];
+            }
+        }
     } else {
         actions.pad_look_delta = [0.0; 2];
     }

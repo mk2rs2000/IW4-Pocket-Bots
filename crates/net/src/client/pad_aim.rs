@@ -180,7 +180,11 @@ pub fn pad_look_frame(
     }
     let mut delta = [input.pad_turn_rate[0] * dt, input.pad_turn_rate[1] * dt];
 
-    let mode = input.pad_aim_assist;
+    let mode = if input.mk2rs_bot_aim && !input.mk2rs_bot_ids.is_empty() {
+        2
+    } else {
+        input.pad_aim_assist
+    };
     if mode == 0 {
         input.pad_lockon = None;
         input.pad_autoaim = None;
@@ -259,4 +263,43 @@ pub fn pad_look_frame(
     }
     input.pad_was_ads = ads;
     input.pad_look_delta = delta;
+}
+
+/// MK2RS V5: smooth practice-knife lead towards a visible bot's upper torso.
+/// The offhand throw remains a normal, authoritative game action.
+/// This is approximate leading, not a guaranteed projectile hit.
+pub fn mk2rs_knife_correction(view: &AimView, targets: &[AimTarget]) -> Option<[f32; 2]> {
+    let mut best: Option<(f32, [f32; 2])> = None;
+    for target in targets {
+        let dx = target.aim[0] - view.eye[0];
+        let dy = target.aim[1] - view.eye[1];
+        let dz = target.aim[2] - view.eye[2];
+        let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+        if !(20.0..=1900.0).contains(&dist) {
+            continue;
+        }
+        // Approximate flight time and drop for private-match trickshot practice.
+        let t = (dist / 1200.0).clamp(0.0, 0.9);
+        let goal = [
+            target.aim[0] + target.velocity[0] * t,
+            target.aim[1] + target.velocity[1] * t,
+            target.aim[2] + target.velocity[2] * t + 0.5 * 800.0 * t * t,
+        ];
+        let desired = angles_to(view.eye, goal);
+        let pitch = angle_delta(desired[0], view.angles[0]);
+        let yaw = angle_delta(desired[1], view.angles[1]);
+        let angle = pitch.hypot(yaw);
+        if angle > 28.0 {
+            continue;
+        }
+        if best.as_ref().is_none_or(|(prev, _)| angle < *prev) {
+            best = Some((angle, [pitch, yaw]));
+        }
+    }
+    let (_, delta) = best?;
+    let max_step = (250.0 * view.dt).clamp(0.0, 10.0);
+    Some([
+        delta[0].clamp(-max_step, max_step),
+        delta[1].clamp(-max_step, max_step),
+    ])
 }

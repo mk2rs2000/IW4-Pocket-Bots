@@ -64,6 +64,11 @@ pub struct ClientActionInput {
     /// Pitch and yaw, degrees.
     pub pad_look_delta: [f32; 2],
     pub pad_aim_assist: u8,
+    // MK2RS_V5_CLASSIC: client-side, practice-bot-only aim options.
+    pub mk2rs_bot_aim: bool,
+    pub mk2rs_knife_aim: bool,
+    pub mk2rs_knife_weapon: u32,
+    pub mk2rs_bot_ids: Vec<u64>,
     pub pad_lockon: Option<u64>,
     pub pad_autoaim: Option<(u64, f32)>,
     pub pad_was_ads: bool,
@@ -99,6 +104,10 @@ impl Default for ClientActionInput {
             pad_turn_rate: [0.0; 2],
             pad_look_delta: [0.0; 2],
             pad_aim_assist: 0,
+            mk2rs_bot_aim: false,
+            mk2rs_knife_aim: false,
+            mk2rs_knife_weapon: 0,
+            mk2rs_bot_ids: Vec::new(),
             pad_lockon: None,
             pad_autoaim: None,
             pad_was_ads: false,

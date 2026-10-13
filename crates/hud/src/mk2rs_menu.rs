@@ -13,6 +13,8 @@ pub(crate) struct Mk2rsState {
     infinite_ammo: bool,
     ammo_timer: f32,
     clan_tag: bool, // cosmetic name prefix only
+    gun_aim: bool,
+    knife_aim: bool,
 }
 
 #[derive(Resource)]
@@ -41,14 +43,38 @@ const MAIN: &[&str] = &[
 const PAGES: &[&[&str]] = &[
     MAIN,
     &["God Mode", "Infinite Ammo"],
-    &["Spawn 1 Bot", "Spawn 5 Bots", "Spawn 10 Bots"],
-    &["Aimbot (not supported yet)"],
+    &[
+        "Spawn 1 Bot",
+        "Spawn 5 Bots",
+        "Spawn 10 Bots",
+        "Freeze Bots",
+    ],
+    &["Bot Aim Assist", "Throwing Knife Aim"],
     &[
         "Give M4A1",
         "Give AK-47",
-        "Give Intervention",
         "Give UMP45",
         "Give Desert Eagle",
+        "Intervention",
+        "Intervention FMJ",
+        "Intervention Extended Mags",
+        "Intervention ACOG",
+        "Intervention Thermal",
+        "Intervention Silenced",
+        "Intervention FMJ + Ext Mags",
+        "Barrett .50cal",
+        "Barrett FMJ",
+        "Barrett Extended Mags",
+        "Barrett ACOG",
+        "Barrett Thermal",
+        "Barrett Silenced",
+        "Barrett FMJ + Ext Mags",
+        "WA2000",
+        "WA2000 FMJ",
+        "WA2000 Extended Mags",
+        "M21 EBR",
+        "M21 EBR FMJ",
+        "M21 EBR Extended Mags",
     ],
     &["Prestige (not supported yet)"],
     &[
@@ -57,7 +83,7 @@ const PAGES: &[&[&str]] = &[
         "Set Name: Player",
         "Clan Tag [MK2] (name prefix)",
     ],
-    &["Super Jump (not supported yet)"],
+    &["Super Jump (requires engine support)"],
 ];
 
 pub(crate) fn load_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
@@ -78,29 +104,51 @@ fn text(value: &str, size: f32, color: Color) -> impl Bundle {
     )
 }
 
+// MK2RS_V5_CLASSIC -- nostalgia styling; no console binaries or copied assets.
 pub(crate) fn spawn_menu(root: &mut ChildSpawnerCommands) {
     root.spawn((
         Mk2rsRoot,
         Node {
             position_type: PositionType::Absolute,
-            left: Val::Percent(31.0),
+            left: Val::Percent(4.0),
             top: Val::Percent(11.0),
             width: Val::Percent(38.0),
-            min_width: Val::Px(310.0),
+            min_width: Val::Px(315.0),
+            max_width: Val::Px(445.0),
             display: Display::None,
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(6.0),
-            padding: UiRect::all(Val::Px(16.0)),
+            row_gap: Val::Px(3.0),
+            padding: UiRect::all(Val::Px(10.0)),
+            border: UiRect::all(Val::Px(2.0)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.02, 0.035, 0.06, 0.95)),
+        BackgroundColor(Color::srgba(0.012, 0.018, 0.018, 0.94)),
+        BorderColor::all(Color::srgb(0.59, 0.66, 0.40)),
         Visibility::Hidden,
         GlobalZIndex(100),
     ))
     .with_children(|parent| {
-        parent.spawn((
-            Mk2rsTitle,
-            text("MK2RS MOD MENU", 23.0, Color::srgb(0.35, 1.0, 0.6)),
+        parent
+            .spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    min_height: Val::Px(34.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.25, 0.29, 0.17, 0.96)),
+            ))
+            .with_children(|head| {
+                head.spawn((
+                    Mk2rsTitle,
+                    text("[ MK2RS ]  OLD SCHOOL", 21.0, Color::srgb(0.94, 0.98, 0.74)),
+                ));
+            });
+        parent.spawn(text(
+            "  MW2  //  TRICKSHOT EDITION  //  V5",
+            12.0,
+            Color::srgb(0.61, 0.76, 0.47),
         ));
         for i in 0..7 {
             parent
@@ -108,24 +156,32 @@ pub(crate) fn spawn_menu(root: &mut ChildSpawnerCommands) {
                     Mk2rsOption(i),
                     Node {
                         width: Val::Percent(100.0),
-                        min_height: Val::Px(31.0),
+                        min_height: Val::Px(27.0),
+                        padding: UiRect::horizontal(Val::Px(9.0)),
                         align_items: AlignItems::Center,
-                        padding: UiRect::horizontal(Val::Px(10.0)),
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.10, 0.15, 0.21, 0.94)),
+                    BackgroundColor(Color::srgba(0.05, 0.08, 0.07, 0.90)),
                     Visibility::Hidden,
                 ))
                 .with_children(|row| {
-                    row.spawn(text("", 17.0, Color::WHITE));
+                    row.spawn(text("", 16.0, Color::srgb(0.88, 0.91, 0.83)));
                 });
         }
         parent.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                min_height: Val::Px(2.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.58, 0.70, 0.32)),
+        ));
+        parent.spawn((
             Mk2rsNotice,
             text(
-                "L3+R3 Close | A Select | B Back",
-                13.0,
-                Color::srgb(0.7, 0.78, 0.86),
+                "L3+R3 CLOSE  /  A SELECT  /  B BACK",
+                12.0,
+                Color::srgb(0.76, 0.83, 0.66),
             ),
         ));
     });
@@ -151,13 +207,19 @@ pub(crate) fn handle_input(
     mut bot_queue: Option<ResMut<bots::BotAddQueue>>,
     font: Option<Res<Mk2rsFont>>,
     time: Res<Time>,
-    weapons: Option<Res<assets::PreparedWeapons>>,
+    practice: (
+        Option<ResMut<net::ClientActionInput>>,
+        Option<Res<bots::BotRoster>>,
+        Option<ResMut<bots::BotHold>>,
+        Option<Res<assets::PreparedWeapons>>,
+    ),
     // MK2RS_GODMODE_BRIDGE: use the game's authoritative ClientAction pipeline.
     mut action_inbox: Option<ResMut<net::ClientActionInbox>>,
     local_client: Option<Res<net::LocalPresentClient>>,
     mut action_ids: Option<ResMut<net::ActionRequestIds>>,
     cheats: Option<Res<sim::HostCheats>>,
 ) {
+    let (mut client_input, roster, mut bot_hold, weapons) = practice;
     let in_game = matches!(*screen, AppScreen::InGame);
     if !in_game {
         state.open = false;
@@ -230,10 +292,51 @@ pub(crate) fn handle_input(
                         if state.infinite_ammo { "ON" } else { "OFF" }
                     );
                 }
+            } else if state.page == 3 {
+                if !role.as_ref().is_some_and(|r| r.runs_authority()) {
+                    state.notice = "Bot aiming is available in hosted matches only".into();
+                } else if state.selected == 0 {
+                    state.gun_aim = !state.gun_aim;
+                    state.notice = format!(
+                        "Bot Aim Assist: {}",
+                        if state.gun_aim { "ON" } else { "OFF" }
+                    );
+                } else {
+                    state.knife_aim = !state.knife_aim;
+                    state.notice = format!(
+                        "Throwing Knife Aim: {}",
+                        if state.knife_aim { "ON" } else { "OFF" }
+                    );
+                }
             } else if state.page == 4 {
                 // MK2RS_V3_CONSOLIDATED: use the same authoritative GiveWeapon action as the console.
-                const WEAPON_NAMES: [&str; 5] =
-                    ["m4", "ak47", "intervention", "ump45", "deserteagle"];
+                // MK2RS_V4_TRICKSHOT: weapon variants from MW2/IW4x naming.
+                const WEAPON_NAMES: [&str; 24] = [
+                    "m4",
+                    "ak47",
+                    "ump45",
+                    "deserteagle",
+                    "cheytac",
+                    "cheytac_fmj",
+                    "cheytac_xmags",
+                    "cheytac_acog",
+                    "cheytac_thermal",
+                    "cheytac_silencer",
+                    "cheytac_fmj_xmags",
+                    "barrett",
+                    "barrett_fmj",
+                    "barrett_xmags",
+                    "barrett_acog",
+                    "barrett_thermal",
+                    "barrett_silencer",
+                    "barrett_fmj_xmags",
+                    "wa2000",
+                    "wa2000_fmj",
+                    "wa2000_xmags",
+                    "m21",
+                    "m21_fmj",
+                    "m21_xmags",
+                ];
                 if !role.as_ref().is_some_and(|r| r.runs_authority())
                     || !cheats.as_ref().is_some_and(|c| c.0)
                 {
@@ -306,7 +409,15 @@ pub(crate) fn handle_input(
                 }
             } else if state.page == 2 {
                 if role.as_ref().is_some_and(|r| r.runs_authority()) {
-                    if let Some(queue) = bot_queue.as_mut() {
+                    if state.selected == 3 {
+                        if let Some(hold) = bot_hold.as_mut() {
+                            hold.0 = !hold.0;
+                            state.notice =
+                                format!("Freeze Bots: {}", if hold.0 { "ON" } else { "OFF" });
+                        } else {
+                            state.notice = "Bot freeze resource unavailable".into();
+                        }
+                    } else if let Some(queue) = bot_queue.as_mut() {
                         let count = [1, 5, 10][state.selected];
                         queue.push(count);
                         state.notice = format!("Requested {count} bot(s)");
@@ -342,6 +453,31 @@ pub(crate) fn handle_input(
             }
         }
     }
+    // Keep the input bridge in sync even with the menu closed.
+    // Target IDs are taken only from BotRoster, never from human players.
+    if let Some(input) = client_input.as_mut() {
+        let can_aim = in_game && role.as_ref().is_some_and(|r| r.runs_authority());
+        input.mk2rs_bot_aim = can_aim && state.gun_aim;
+        input.mk2rs_knife_aim = can_aim && state.knife_aim;
+        input.mk2rs_bot_ids.clear();
+        if can_aim && (state.gun_aim || state.knife_aim) {
+            if let Some(roster) = roster.as_ref() {
+                input
+                    .mk2rs_bot_ids
+                    .extend(roster.bots.iter().map(|b| u64::from(b.id.0)));
+            }
+        }
+        input.mk2rs_knife_weapon = weapons
+            .as_ref()
+            .and_then(|catalog| {
+                catalog
+                    .0
+                    .resolve_index("iw4:weapon/throwingknife_mp")
+                    .ok()
+                    .flatten()
+            })
+            .unwrap_or(0);
+    }
     if let Ok((mut visibility, mut node)) = root.single_mut() {
         *visibility = if state.open {
             Visibility::Visible
@@ -362,7 +498,11 @@ pub(crate) fn handle_input(
     }
     if let Ok(mut text) = footer.single_mut() {
         text.0 = if state.notice.is_empty() {
-            "L3+R3 Close | A Select | B Back".into()
+            format!(
+                "{}/{} | L3+R3 CLOSE | A SELECT | B BACK",
+                state.selected + 1,
+                PAGES[state.page].len()
+            )
         } else {
             state.notice.clone()
         };
@@ -375,20 +515,23 @@ pub(crate) fn handle_input(
         }
     }
     for (index, mut bg, mut visibility, children) in &mut rows {
-        let Some(item) = PAGES[state.page].get(index.0) else {
+        // Scroll a 7-row viewport over the selected page.
+        let window_start = state.selected.saturating_sub(6);
+        let item_index = window_start + index.0;
+        let Some(item) = PAGES[state.page].get(item_index) else {
             *visibility = Visibility::Hidden;
             continue;
         };
         *visibility = Visibility::Visible;
-        let selected = index.0 == state.selected;
+        let selected = item_index == state.selected;
         *bg = BackgroundColor(if selected {
-            Color::srgba(0.10, 0.44, 0.28, 0.97)
+            Color::srgba(0.36, 0.44, 0.19, 0.98)
         } else {
-            Color::srgba(0.10, 0.15, 0.21, 0.94)
+            Color::srgba(0.045, 0.071, 0.060, 0.94)
         });
         for child in children.iter() {
             if let Ok((mut value, mut color, _)) = texts.get_mut(child) {
-                let label = if state.page == 1 && index.0 == 0 {
+                let label = if state.page == 1 && item_index == 0 {
                     format!(
                         "God Mode: {} (requested)",
                         if state.god_mode_requested {
@@ -397,12 +540,28 @@ pub(crate) fn handle_input(
                             "OFF"
                         }
                     )
-                } else if state.page == 1 && index.0 == 1 {
+                } else if state.page == 1 && item_index == 1 {
                     format!(
                         "Infinite Ammo: {}",
                         if state.infinite_ammo { "ON" } else { "OFF" }
                     )
-                } else if state.page == 6 && index.0 == 3 {
+                } else if state.page == 2 && item_index == 3 {
+                    format!(
+                        "Freeze Bots: {}",
+                        if bot_hold.as_ref().is_some_and(|h| h.0) {
+                            "ON"
+                        } else {
+                            "OFF"
+                        }
+                    )
+                } else if state.page == 3 {
+                    let on = if item_index == 0 {
+                        state.gun_aim
+                    } else {
+                        state.knife_aim
+                    };
+                    format!("{item}: {}", if on { "ON" } else { "OFF" })
+                } else if state.page == 6 && item_index == 3 {
                     format!(
                         "Clan Tag [MK2]: {} (name prefix)",
                         if state.clan_tag { "ON" } else { "OFF" }
@@ -410,7 +569,7 @@ pub(crate) fn handle_input(
                 } else {
                     (*item).to_owned()
                 };
-                value.0 = format!("{} {label}", if selected { ">" } else { " " });
+                value.0 = format!("{} {label}", if selected { ">>" } else { "  " });
                 color.0 = Color::WHITE;
             }
         }
