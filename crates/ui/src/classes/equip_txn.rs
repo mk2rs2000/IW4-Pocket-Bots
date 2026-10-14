@@ -231,6 +231,33 @@ fn consume_class_select_handoff(
     mut store: ResMut<SessionClassStore>,
     weapons: Option<Res<assets::PreparedWeapons>>,
 ) {
+    // IW4L_STABILITY_V6: the menu's CAC registry was constructed from a
+    // separate shell common_mp walk. Once a match is running, retaining it
+    // alongside PreparedWeapons can keep a large duplicate weapon catalogue
+    // alive until the app is terminated. The match registry has the same
+    // lookup API and is already the authority for class equipping.
+    //
+    // Run this *before* the handoff.pending early return: it must also occur
+    // when the menu was constructed earlier and the class handoff is delayed.
+    // This only swaps Arc handles (no deep clone) and only when they differ.
+    #[cfg(target_os = "ios")]
+    if let Some(active) = weapons.as_ref() {
+        let installed = &active.0;
+        if catalog
+            .resolver
+            .0
+            .as_ref()
+            .is_none_or(|shell| !std::sync::Arc::ptr_eq(shell, installed))
+        {
+            let shell = catalog.resolver.0.replace(std::sync::Arc::clone(installed));
+            diag::info!(
+                Ui,
+                "iOS stability V6: CAC now shares the active match weapon registry; released_shell_registry={}",
+                shell.is_some()
+            );
+            drop(shell);
+        }
+    }
     if !handoff.pending {
         return;
     }

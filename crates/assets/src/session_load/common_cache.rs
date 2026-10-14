@@ -131,7 +131,9 @@ impl CommonSet {
     pub(super) fn match_products(self: &Arc<Self>) -> Option<CommonProducts> {
         let transfer = cfg!(target_os = "ios")
             && !diag::memory_settings::get().resident_map
-            && std::env::var("IW4L_COMMON_TRANSFER").as_deref() != Ok("0");
+            // IW4L_STABILITY_V6: V5 regressed Highrise for this device.
+            // Preserve the old safe clone path unless explicitly opted in.
+            && std::env::var("IW4L_COMMON_TRANSFER").as_deref() == Ok("1");
         if !transfer {
             return self
                 .products
