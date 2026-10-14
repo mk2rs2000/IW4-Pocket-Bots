@@ -126,7 +126,9 @@ impl WorldDrawGpuPlan {
                 source_layout: "packed payload consumed by WorldDrawGpuPlan",
             },
         );
-        let vertex_layer = scene.retained_vertex_layer.clone();
+        // IW4L_STABILITY_V7: only this draw plan needs the vertex-layer table.
+        // Transfer its allocation instead of keeping two live copies.
+        let vertex_layer = std::mem::take(&mut scene.retained_vertex_layer);
         let n = scene.retained_positions.len();
         let mut vertices = Vec::with_capacity(n);
         for i in 0..n {
@@ -156,9 +158,37 @@ impl WorldDrawGpuPlan {
             });
         }
 
-        scene.retained_tangents.clear();
-        scene.retained_colors.clear();
-        scene.retained_texture_uvs.clear();
+        // These CPU-only decoded attributes have been copied into `vertices`.
+        // Vec::clear() would retain their potentially large capacities for the
+        // entire match. Explicitly drop the backing allocations instead.
+        // DO NOT free positions, normals or lightmap UVs: world marks use them.
+        let released_capacity_bytes = scene
+            .retained_tangents
+            .capacity()
+            .saturating_mul(std::mem::size_of::<[f32; 4]>())
+            .saturating_add(
+                scene
+                    .retained_colors
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<[f32; 4]>()),
+            )
+            .saturating_add(
+                scene
+                    .retained_texture_uvs
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<[f32; 2]>()),
+            );
+        drop(std::mem::take(&mut scene.retained_tangents));
+        drop(std::mem::take(&mut scene.retained_colors));
+        drop(std::mem::take(&mut scene.retained_texture_uvs));
+        #[cfg(target_os = "ios")]
+        diag::info!(
+            World,
+            "iOS stability V7: retired unused world vertex scratch capacity={} MiB (allocator may retain pages)",
+            released_capacity_bytes / (1024 * 1024)
+        );
+        #[cfg(not(target_os = "ios"))]
+        let _ = released_capacity_bytes;
 
         let mut materials = Vec::new();
         let mut batch_to_mat = vec![u32::MAX; scene.batches.len()];

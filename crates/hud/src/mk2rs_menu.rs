@@ -533,7 +533,7 @@ pub(crate) fn handle_input(
             if let Ok((mut value, mut color, _)) = texts.get_mut(child) {
                 let label = if state.page == 1 && item_index == 0 {
                     format!(
-                        "God Mode: {} (requested)",
+                        "God Mode: {}",
                         if state.god_mode_requested {
                             "ON"
                         } else {
