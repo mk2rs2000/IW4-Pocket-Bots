@@ -155,6 +155,14 @@ pub(super) fn kick_admitted_pipelines(
         kicked.scheduled.clear();
         kicked.generation = Some(extracted.world.generation);
         kicked.views = view_sig.clone();
+        if cfg!(target_os = "ios") && extracted.frame.terminal_spawn_guard {
+            let budget = terminal_startup_pipeline_budget(true);
+            diag::info!(
+                World,
+                "Terminal V4: initial pipeline prewarm budget={} (0=unlimited in iw4l-env.txt); other maps retain V3",
+                if budget == usize::MAX { 0 } else { budget }
+            );
+        }
         schedule_admitted_pipelines(
             extracted,
             prepared_table,
@@ -206,6 +214,23 @@ pub(super) fn kick_admitted_pipelines(
     };
 }
 
+// IW4L_TERMINAL_SPAWN_V4: map-specific limit on eager iOS pipelines.
+// Discovered material/pipeline keys are still requested later through
+// ExactPipelineRegistry::discover, so this does not discard shader variants.
+fn terminal_startup_pipeline_budget(is_terminal: bool) -> usize {
+    if !cfg!(target_os = "ios") || !is_terminal {
+        return usize::MAX;
+    }
+    match std::env::var("IW4L_TERMINAL_PREWARM")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+    {
+        Some(0) => usize::MAX,
+        Some(value @ 64..=4096) => value,
+        _ => 320,
+    }
+}
+
 fn schedule_admitted_pipelines(
     extracted: ExtractedColourRefs<'_>,
     prepared_table: &render_material::PreparedMaterialTable,
@@ -224,6 +249,7 @@ fn schedule_admitted_pipelines(
     let trim_ios_prewarm =
         cfg!(target_os = "ios") && std::env::var("IW4L_MAP_PIPELINE_TRIM").as_deref() != Ok("0");
     let skip_shadow_prewarm = trim_ios_prewarm && diag::session::shadows_forced_off();
+    let startup_budget = terminal_startup_pipeline_budget(extracted.frame.terminal_spawn_guard);
     for (main_format, samples) in view_sig.iter().copied() {
         let techs = lighting_iw4::LIT_TECH_NO_SHADOW_DIR_SLOTS
             .into_iter()
@@ -309,7 +335,10 @@ fn schedule_admitted_pipelines(
                         mark_mesh: false,
                         forward_z: shadow,
                     };
-                    if scheduled.insert(key) {
+                    // Do not enqueue hundreds of optional shader variants while
+                    // Terminal is already within 100 MiB of its iOS allowance.
+                    // Unscheduled variants remain discoverable on first draw.
+                    if scheduled.len() < startup_budget && scheduled.insert(key) {
                         current.push(request_exact_pipeline(registry, pipeline, device, key));
                     }
                 }

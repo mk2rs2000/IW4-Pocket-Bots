@@ -247,6 +247,10 @@ pub fn valid_file_setting(name: &str, value: &str) -> bool {
         "IW4L_PIPELINED_RENDERING" => matches!(value, "0" | "1"),
         // IW4L_MAP_PIPELINE_TRIM_V3: reversible iOS map-load optimisation.
         "IW4L_MAP_PIPELINE_TRIM" => matches!(value, "0" | "1"),
+        // IW4L_TERMINAL_SPAWN_V4: zero reverts to V3; 64..4096 cap warming.
+        "IW4L_TERMINAL_PREWARM" => value
+            .parse::<usize>()
+            .is_ok_and(|n| n == 0 || (64..=4096).contains(&n)),
         // A/B test the allocator-pressure experiment without rebuilding.
         "IW4L_MEMORY_RELIEF" => matches!(value, "0" | "1"),
         _ => false,

@@ -190,6 +190,8 @@ pub struct RenderFrameData {
     pub sun_shadow: Option<SunShadowForcedFrame>,
     pub sun_effects: Option<render_frame::SunEffectsFrame>,
     pub warm_pipelines: bool,
+    // IW4L_TERMINAL_SPAWN_V4: Terminal's iOS-only prewarm budget.
+    pub terminal_spawn_guard: bool,
     pub pipeline_world_materials: Arc<std::collections::HashSet<u16>>,
     pub pipeline_smodel_materials: Arc<std::collections::HashSet<u16>>,
     pub pipeline_demand_revision: u64,

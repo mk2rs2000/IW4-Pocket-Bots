@@ -162,6 +162,7 @@ pub fn seal_render_frame(
         Option<Res<render_frontend::assemble::drawsurf::StaticDrawLane>>,
         Option<Res<frame::WorldGeneration>>,
         Option<Res<frame::WorldProducts>>,
+        Option<Res<assets::MapLoadProcess>>, // IW4L_TERMINAL_SPAWN_V4
     ),
     xmodel: Option<Res<XModelDrawPlan>>,
     fx: Option<Res<FxCodeMeshPlan>>,
@@ -180,7 +181,7 @@ pub fn seal_render_frame(
         Option<Res<PublishedRenderFrame>>,
     ),
 ) {
-    let (retained, world_generation, world_products) = static_identity;
+    let (retained, world_generation, world_products, map_load) = static_identity;
     let world_products = world_products.map(|products| *products).unwrap_or_default();
     let (runtime, mat_frame, assembly, products) = material;
     let Some(runtime) = runtime.as_ref() else {
@@ -583,6 +584,12 @@ pub fn seal_render_frame(
         sun_shadow: mat_frame.sun_shadow,
         sun_effects: sun.1.and_then(|input| input.frame),
         warm_pipelines,
+        // Only the Terminal map needs a smaller startup footprint. Other maps
+        // retain the successful V3 warmup and FPS behaviour.
+        terminal_spawn_guard: cfg!(target_os = "ios")
+            && map_load
+                .as_ref()
+                .is_some_and(|load| load.zone == "mp_terminal"),
         pipeline_world_materials: spawn_job
             .as_ref()
             .map(|job| job.pipeline_world_materials.clone())
