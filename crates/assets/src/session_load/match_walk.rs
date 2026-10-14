@@ -43,15 +43,21 @@ pub(super) async fn walk_prepared_match(
         &mut donor_report,
     );
     let waiting = progress.begin_scoped(StageId::CommonAssets, "shared common", None);
-    let (common, reach) = ensure_common(key).await;
+    // IW4L_COMMON_TRANSFER_V5: on iOS, move common data once rather than
+    // retaining a full deep copy during the entire game session. Multiple
+    // concurrent loaders retry if another has already consumed this set.
+    let (common, reach, products) = loop {
+        let (common, reach) = ensure_common(key.clone()).await;
+        if progress.is_canceled() {
+            waiting.done();
+            diag::info!(World, "match walk: canceled while common data was prepared");
+            return (MatchLoadOutcome::Canceled, None);
+        }
+        if let Some(products) = common.match_products() {
+            break (common, reach, products);
+        }
+    };
     waiting.done();
-    if progress.is_canceled() {
-        diag::info!(
-            World,
-            "match walk: canceled while the common set was prepared — load retargeted"
-        );
-        return (MatchLoadOutcome::Canceled, None);
-    }
 
     let cloning = std::time::Instant::now();
     let CommonProducts {
@@ -99,12 +105,12 @@ pub(super) async fn walk_prepared_match(
             },
         report: mut common_report,
         localize_report,
-    } = common.products.clone();
+    } = products;
     let clone_ms = cloning.elapsed().as_secs_f32() * 1000.0;
     let iw5_mat_n = iw5_materials.materials.len();
     common_report.append(&mut donor_report);
     common_report.push(format!(
-        "common set: {reach} for {} (prepared in {:.0}ms, {:.1}s ago); match copy {clone_ms:.0}ms; {} donor image batches and {} kept payloads ({:.1}MiB) shared, not decoded again",
+        "common set: {reach} for {} (prepared in {:.0}ms, {:.1}s ago); match handoff {clone_ms:.0}ms; {} donor image batches and {} kept payloads ({:.1}MiB) shared, not decoded again",
         common.key,
         common.prepared_ms,
         common.ready_at.elapsed().as_secs_f32(),
@@ -529,9 +535,13 @@ pub(super) async fn walk_prepared_match(
         // The copy shares Arcs only; disabled mode adds no extra owner at all.
         let retention_batch = (budget != 0).then(|| batch.share());
         merge_image_batch(&mut global, label, batch, job, &mut report);
-        let mut retained = common.fpv_retained.lock()
+        let mut retained = common
+            .fpv_retained
+            .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        let kept = retention_batch.as_ref().map_or(0, |batch| retained.keep_bounded(batch, budget));
+        let kept = retention_batch
+            .as_ref()
+            .map_or(0, |batch| retained.keep_bounded(batch, budget));
         report.push(format!(
             "{label} optional FPV next-map cache: +{:.1}MiB ({} payloads, {:.1}MiB; budget_bytes={budget}; donor batches excluded)",
             kept as f64 / (1024.0 * 1024.0),

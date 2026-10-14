@@ -111,7 +111,8 @@ pub(super) struct KeptImages {
 pub struct CommonSet {
     pub(super) id: u64,
     pub(super) key: CommonKey,
-    pub(super) products: CommonProducts,
+    // IW4L_COMMON_TRANSFER_V5: iOS can move prepared assets into a match.
+    pub(super) products: std::sync::Mutex<Option<CommonProducts>>,
     donor_images: async_lock::OnceCell<Vec<KeptImages>>,
     pub(super) fpv_plan: Option<ImageDemandPlan>,
     pub(super) retained: std::sync::Mutex<asset_material::material_images::PayloadRetention>,
@@ -122,6 +123,48 @@ pub struct CommonSet {
 }
 
 impl CommonSet {
+    /// IW4L_COMMON_TRANSFER_V5: avoid a potentially very large deep clone
+    /// of the common weapons, animations and model catalogues on iOS.
+    /// Cache entries with consumed products are invalidated so future loads
+    /// build a new common set. Image donor data stays alive on this Arc until
+    /// the current match finishes preparing.
+    pub(super) fn match_products(self: &Arc<Self>) -> Option<CommonProducts> {
+        let transfer = cfg!(target_os = "ios")
+            && !diag::memory_settings::get().resident_map
+            && std::env::var("IW4L_COMMON_TRANSFER").as_deref() != Ok("0");
+        if !transfer {
+            return self
+                .products
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .as_ref()
+                .cloned();
+        }
+        let owned = self
+            .products
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .take();
+        if owned.is_some() {
+            // Another load could have joined the old flight already. Such a
+            // caller will see None and retry on this newly invalidated cache.
+            let mut slot = COMMON.lock().unwrap_or_else(|poison| poison.into_inner());
+            let matching = slot
+                .as_ref()
+                .and_then(|flight| flight.set.get())
+                .and_then(Option::as_ref)
+                .is_some_and(|cached| Arc::ptr_eq(cached, self));
+            if matching {
+                slot.take();
+            }
+            diag::info!(
+                World,
+                "iOS common transfer V5: moved prepared asset catalogue into match; next match must reprepare common_mp"
+            );
+        }
+        owned
+    }
+
     pub(super) async fn donor_images(&self) -> &[KeptImages] {
         self.donor_images.wait().await
     }
@@ -257,8 +300,23 @@ pub struct ShellCommon {
 pub async fn load_shell_common(games: asset_transport::GamesRoot) -> ShellCommon {
     let mut report = Vec::new();
     let key = CommonKey::shell(&games, &mut report);
-    let (common, reach) = ensure_common(key).await;
-    let weapons = common.products.weapons.clone().publish();
+    // A simultaneous match load may consume the common products while the
+    // shell is loading. Retry with a newly prepared common set in that case.
+    let (common, reach, weapons, strings) = loop {
+        let (common, reach) = ensure_common(key.clone()).await;
+        let pair = {
+            let guard = common
+                .products
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            guard
+                .as_ref()
+                .map(|products| (products.weapons.clone().publish(), products.strings.clone()))
+        };
+        if let Some((weapons, strings)) = pair {
+            break (common, reach, weapons, strings);
+        }
+    };
     report.push(format!(
         "CAC: {reach} common set {}; weapons={} (iw4={} iw5={} t5={} t6={}) tables={}",
         common.key,
@@ -301,7 +359,7 @@ pub async fn load_shell_common(games: asset_transport::GamesRoot) -> ShellCommon
     }
     ShellCommon {
         weapons,
-        strings: common.products.strings.clone(),
+        strings,
         tables: common.cac_tables.clone(),
         report,
     }
@@ -865,7 +923,7 @@ async fn prepare_common(key: CommonKey) -> Arc<CommonSet> {
     let set = Arc::new(CommonSet {
         id: NEXT_COMMON_PROFILE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         key,
-        products: CommonProducts {
+        products: std::sync::Mutex::new(Some(CommonProducts {
             scripts,
             t5_scene_models,
             material_seed,
@@ -909,7 +967,7 @@ async fn prepare_common(key: CommonKey) -> Arc<CommonSet> {
             },
             report: common_report,
             localize_report,
-        },
+        })),
         donor_images: async_lock::OnceCell::new(),
         fpv_plan,
         retained: std::sync::Mutex::new(Default::default()),

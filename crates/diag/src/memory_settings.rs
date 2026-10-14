@@ -236,6 +236,8 @@ pub fn valid_file_setting(name: &str, value: &str) -> bool {
         "IW4L_SOUND" => matches!(value, "off" | "0" | "on" | "1"),
         // Metal keeps at most three drawables, so latency above 2 does nothing.
         "IW4L_FRAME_LATENCY" => matches!(value, "1" | "2"),
+        // IW4L_COMMON_TRANSFER_V5: disable iOS ownership transfer for A/B testing.
+        "IW4L_COMMON_TRANSFER" => matches!(value, "0" | "1"),
         // 0 keeps the display at 60 Hz instead of asking for 120 Hz in matches.
         "IW4L_PROMOTION" => matches!(value, "0" | "1"),
         // Frame pacing (see frame_pacing.rs): presents per second the present is
